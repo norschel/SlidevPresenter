@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -12,6 +13,7 @@ public partial class ParticipantWindow : Window
     private readonly WebViewNavigationPolicy _navigationPolicy;
     private readonly PresentationEscapeHandler _escapeHandler;
     private bool _exitRaised;
+    private bool _isFullscreenRequested;
 
     /// <summary>Raised when the user requests to exit the presentation (e.g. via ESC).</summary>
     public event EventHandler? PresentationExited;
@@ -46,7 +48,11 @@ public partial class ParticipantWindow : Window
     }
 
     /// <summary>Puts the window into fullscreen mode.</summary>
-    public void SetFullscreen() => WindowState = WindowState.FullScreen;
+    public void SetFullscreen()
+    {
+        _isFullscreenRequested = true;
+        WindowState = WindowState.FullScreen;
+    }
 
     private void AttachHandlers()
     {
@@ -107,6 +113,25 @@ public partial class ParticipantWindow : Window
             return;
         _exitRaised = true;
         PresentationExited?.Invoke(this, EventArgs.Empty);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        // When the window exits fullscreen (e.g. via OS-level ESC on macOS, which never
+        // reaches Avalonia's key routing), treat the state transition as an exit request.
+        // The _isFullscreenRequested guard ensures we only react to transitions caused by
+        // an explicit SetFullscreen() call, not unrelated window-state changes.
+        if (_isFullscreenRequested
+            && change.Property == WindowStateProperty
+            && change.OldValue is WindowState oldState
+            && change.NewValue is WindowState newState
+            && oldState == WindowState.FullScreen
+            && newState != WindowState.FullScreen)
+        {
+            RaisePresentationExited();
+        }
     }
 
 }
