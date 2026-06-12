@@ -1,4 +1,3 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -110,19 +109,4 @@ public partial class ParticipantWindow : Window
         PresentationExited?.Invoke(this, EventArgs.Empty);
     }
 
-    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
-    {
-        base.OnPropertyChanged(change);
-
-        // When the window exits fullscreen (e.g. via OS-level ESC on macOS, which never
-        // reaches Avalonia's key routing), treat the state transition as an exit request.
-        if (change.Property == WindowStateProperty
-            && change.OldValue is WindowState oldState
-            && change.NewValue is WindowState newState
-            && oldState == WindowState.FullScreen
-            && newState != WindowState.FullScreen)
-        {
-            RaisePresentationExited();
-        }
-    }
 }
