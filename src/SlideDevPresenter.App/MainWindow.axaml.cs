@@ -194,4 +194,17 @@ public partial class MainWindow : Window
         ConfigureShortcutBindings();
         ConfigureShortcutTooltips();
     }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        // Stop the active presentation when ESC is pressed in the main window.
+        // This covers the common case where the user has focus on the main window
+        // while the participant window is visible on the same or a different display.
+        if (!e.Handled && e.Key == Key.Escape && _viewModel?.StopCommand.CanExecute(null) == true)
+        {
+            _viewModel.StopCommand.Execute(null);
+            e.Handled = true;
+        }
+        base.OnKeyDown(e);
+    }
 }
