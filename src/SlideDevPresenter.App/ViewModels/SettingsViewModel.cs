@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SlideDevPresenter.App.Services;
 using SlideDevPresenter.Core.Models;
 using SlideDevPresenter.Core.Services;
 
@@ -9,9 +10,11 @@ namespace SlideDevPresenter.App.ViewModels;
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly ISettingsService _settingsService;
+    private readonly IThemeService _themeService;
 
     public ObservableCollection<SourceViewModel> Sources { get; } = [];
     public IReadOnlyList<string> AvailableModes { get; } = Enum.GetNames<PresentationSurfaceMode>();
+    public IReadOnlyList<string> AvailableThemes { get; } = ["System", "Light", "Dark"];
 
     [ObservableProperty]
     private SourceViewModel? _selectedSource;
@@ -59,8 +62,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     private bool _restoreDisplayTopologyOnExit;
 
     public SettingsViewModel(ISettingsService settingsService)
+        : this(settingsService, new ThemeService())
+    {
+    }
+
+    public SettingsViewModel(ISettingsService settingsService, IThemeService themeService)
     {
         _settingsService = settingsService;
+        _themeService = themeService;
         LoadFromSettings(settingsService.Settings);
     }
 
@@ -168,5 +177,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         settings.DisplayManagement.RestoreDisplayTopologyOnExit = RestoreDisplayTopologyOnExit;
 
         await _settingsService.SaveAsync();
+        _themeService.ApplyTheme(Theme);
     }
 }

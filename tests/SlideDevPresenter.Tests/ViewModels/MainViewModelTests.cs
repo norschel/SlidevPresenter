@@ -529,6 +529,60 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public async Task StartFromBeginningAsync_NavigatesToFirstSlide()
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+
+        await vm.StartFromBeginningAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        Assert.Equal("http://localhost:3030/#/1", vm.ParticipantUrl);
+        Assert.Equal("http://localhost:3030/presenter/#/1", vm.PresenterUrl);
+    }
+
+    [Fact]
+    public async Task StartFromCurrentSlideAsync_NavigatesToSelectedSlide()
+    {
+        var host = new FakeProcessHost();
+        var reader = new FakeSlideDeckMetadataReader
+        {
+            Metadata = new SlideDeckMetadata
+            {
+                DeckTitle = "Deck",
+                Slides =
+                [
+                    new SlideDeckSlide(1, "Intro", "Welcome"),
+                    new SlideDeckSlide(7, "Demo", "Current")
+                ]
+            }
+        };
+        var vm = CreateViewModel(host: host, reader: reader);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        vm.SelectedOutlineSlide = new SlideDeckSlide(7, "Demo", "Current");
+
+        await vm.StartFromCurrentSlideAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        Assert.Equal("http://localhost:3030/#/7", vm.ParticipantUrl);
+        Assert.Equal("http://localhost:3030/presenter/#/7", vm.PresenterUrl);
+    }
+
+    [Fact]
+    public async Task StartPresenterViewAsync_SelectsPresenterSurface()
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        vm.UseParticipantSurface();
+
+        await vm.StartPresenterViewAsync();
+
+        Assert.Equal(PresentationSurfaceMode.Presenter, vm.SelectedSurfaceMode);
+    }
+
+    [Fact]
     public void SelectPresentationRibbon_SetsIsPresentationRibbonSelected()
     {
         var vm = CreateViewModel();

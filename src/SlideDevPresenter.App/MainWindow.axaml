@@ -49,7 +49,9 @@
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsPresentationRibbonSelected}">
-                            <Button Content="▶ Start" Command="{Binding LaunchCommand}" ToolTip.Tip="Start presentation"/>
+                            <Button x:Name="StartFromBeginningButton" Content="▶ Start" Command="{Binding StartFromBeginningCommand}" ToolTip.Tip="Start presentation"/>
+                            <Button x:Name="StartFromCurrentButton" Content="Start Current" Command="{Binding StartFromCurrentSlideCommand}" ToolTip.Tip="Start from selected slide"/>
+                            <Button x:Name="StartPresenterViewButton" Content="Presenter View" Command="{Binding StartPresenterViewCommand}" ToolTip.Tip="Start presenter view"/>
                             <Button Content="■ Stop" Command="{Binding StopCommand}" ToolTip.Tip="Stop presentation"/>
                             <Button Content="↻ Retry" Command="{Binding RetryCommand}" ToolTip.Tip="Retry presentation"/>
                             <Button Content="Detect Displays" Command="{Binding DetectDisplaysCommand}" ToolTip.Tip="Detect connected displays"/>
@@ -128,7 +130,7 @@
 
                     <Border Grid.Row="1" Grid.Column="0" Background="#101010" CornerRadius="12" Padding="8">
                         <Panel>
-                            <NativeWebView IsVisible="{Binding CanShowEmbeddedSurface}" Source="{Binding CurrentSurfaceUriOrBlank}"/>
+                            <NativeWebView x:Name="EmbeddedWebView" IsVisible="{Binding CanShowEmbeddedSurface}" Source="{Binding CurrentSurfaceUriOrBlank}"/>
                             <StackPanel IsVisible="{Binding CanShowEmbeddedSurface, Converter={x:Static BoolConverters.Not}}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="420">
                                 <TextBlock Text="Embedded preview unavailable" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                                 <TextBlock Text="{Binding EmbeddedSurfaceHint}" TextWrapping="Wrap" TextAlignment="Center" Opacity="0.7"/>

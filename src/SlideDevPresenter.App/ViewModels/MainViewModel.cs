@@ -24,6 +24,7 @@ public sealed partial class MainViewModel : ObservableObject
     private int _metadataLoadVersion;
     private bool _hasAutoOpenedForCurrentRun;
     private bool _isHostedSessionActive;
+    private int? _pendingSlideNavigation;
 
     public ObservableCollection<PresentationProjectViewModel> Projects { get; } = [];
     public ObservableCollection<SlideDeckSlide> Slides { get; } = [];
@@ -284,6 +285,26 @@ public sealed partial class MainViewModel : ObservableObject
 
     private bool CanLaunch() => SelectedProject is not null && HostState == HostState.Idle;
 
+    [RelayCommand]
+    public async Task StartFromBeginningAsync()
+    {
+        await StartForSlideAsync(1, PresentationSurfaceMode.Presenter);
+    }
+
+    [RelayCommand]
+    public async Task StartFromCurrentSlideAsync()
+    {
+        var currentSlide = SelectedOutlineSlide?.Number ?? 1;
+        await StartForSlideAsync(currentSlide, SelectedSurfaceMode);
+    }
+
+    [RelayCommand]
+    public async Task StartPresenterViewAsync()
+    {
+        var currentSlide = SelectedOutlineSlide?.Number ?? 1;
+        await StartForSlideAsync(currentSlide, PresentationSurfaceMode.Presenter);
+    }
+
     [RelayCommand(CanExecute = nameof(CanStop))]
     public async Task StopAsync()
     {
@@ -433,6 +454,13 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void ApplyStateSnapshot(HostState state, string? participantUrl, string? presenterUrl, int? port, string? errorMessage, bool resetElapsedOnIdle = true)
     {
+        if (state == HostState.Running && _pendingSlideNavigation is int slideNumber)
+        {
+            participantUrl = BuildSlideNavigationUrl(participantUrl, slideNumber);
+            presenterUrl = BuildSlideNavigationUrl(presenterUrl, slideNumber);
+            _pendingSlideNavigation = null;
+        }
+
         HostState = state;
         ParticipantUrl = participantUrl;
         PresenterUrl = presenterUrl;
@@ -557,6 +585,47 @@ public sealed partial class MainViewModel : ObservableObject
         var builder = new UriBuilder(uri)
         {
             Path = $"{trimmedPath}/presenter/"
+        };
+
+        return builder.Uri.ToString();
+    }
+
+    private async Task StartForSlideAsync(int slideNumber, PresentationSurfaceMode surfaceMode)
+    {
+        var normalizedSlide = Math.Max(1, slideNumber);
+        SelectedSurfaceMode = surfaceMode;
+
+        if (HostState == HostState.Running)
+        {
+            NavigateRunningSessionToSlide(normalizedSlide);
+            return;
+        }
+
+        _pendingSlideNavigation = normalizedSlide;
+        await LaunchAsync();
+    }
+
+    private void NavigateRunningSessionToSlide(int slideNumber)
+    {
+        ParticipantUrl = BuildSlideNavigationUrl(ParticipantUrl, slideNumber);
+        PresenterUrl = BuildSlideNavigationUrl(PresenterUrl, slideNumber);
+        OnPropertyChanged(nameof(CurrentSurfaceUrl));
+        OnPropertyChanged(nameof(CurrentSurfaceUriOrBlank));
+        OnPropertyChanged(nameof(CanShowEmbeddedSurface));
+        OnPropertyChanged(nameof(CanShowBrowserFallback));
+
+        if (_settingsService.Settings.DisplayManagement.AutoDetectDisplays && !string.IsNullOrWhiteSpace(ParticipantUrl))
+            _ = _presentationWindowService.OpenAsync(ParticipantUrl!, PresenterUrl);
+    }
+
+    private static string? BuildSlideNavigationUrl(string? url, int slideNumber)
+    {
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return url;
+
+        var builder = new UriBuilder(uri)
+        {
+            Fragment = $"/{Math.Max(1, slideNumber)}"
         };
 
         return builder.Uri.ToString();

@@ -67,11 +67,7 @@
             <TabItem Header="Appearance">
                 <StackPanel Spacing="10" Margin="12">
                     <TextBlock Text="Theme"/>
-                    <ComboBox Width="180">
-                        <ComboBoxItem Content="System"/>
-                        <ComboBoxItem Content="Light"/>
-                        <ComboBoxItem Content="Dark"/>
-                    </ComboBox>
+                    <ComboBox Width="180" ItemsSource="{Binding AvailableThemes}" SelectedItem="{Binding Theme}"/>
                     <CheckBox Content="Show status bar" IsChecked="{Binding ShowStatusBar}"/>
                     <CheckBox Content="Show ribbon" IsChecked="{Binding ShowRibbon}"/>
                 </StackPanel>
