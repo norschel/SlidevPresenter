@@ -4,8 +4,6 @@ using SlideDevPresenter.Core.Services;
 
 namespace SlideDevPresenter.Tests.ViewModels;
 
-// ── Fakes ─────────────────────────────────────────────────────────────────────
-
 internal sealed class FakeSettingsService : ISettingsService
 {
     public AppSettings Settings { get; } = new();
@@ -23,6 +21,14 @@ internal sealed class FakeSourceScanner : ISourceScanner
         IsProjectMap.TryGetValue(directoryPath, out var v) && v;
 }
 
+internal sealed class FakeSlideDeckMetadataReader : ISlideDeckMetadataReader
+{
+    public SlideDeckMetadata Metadata { get; set; } = SlideDeckMetadata.Empty("Presentation workspace");
+
+    public Task<SlideDeckMetadata> ReadAsync(PresentationProject project, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Metadata);
+}
+
 internal sealed class FakeProcessHost : ISlidevProcessHost
 {
     public HostState State { get; private set; } = HostState.Idle;
@@ -30,11 +36,14 @@ internal sealed class FakeProcessHost : ISlidevProcessHost
     public string? PresenterUrl { get; private set; }
     public int? Port { get; private set; }
     public string? ErrorMessage { get; private set; }
+    public int StartCallCount { get; private set; }
+    public int StopCallCount { get; private set; }
 
     public event EventHandler<HostStateChangedEventArgs>? StateChanged;
 
     public Task StartAsync(PresentationProject project, int port, CancellationToken cancellationToken = default)
     {
+        StartCallCount++;
         Port = port;
         State = HostState.Starting;
         StateChanged?.Invoke(this, new HostStateChangedEventArgs(HostState.Starting));
@@ -43,6 +52,7 @@ internal sealed class FakeProcessHost : ISlidevProcessHost
 
     public Task StopAsync(CancellationToken cancellationToken = default)
     {
+        StopCallCount++;
         Port = null;
         ParticipantUrl = null;
         PresenterUrl = null;
@@ -68,15 +78,14 @@ internal sealed class FakeProcessHost : ISlidevProcessHost
     }
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
 public class MainViewModelTests
 {
     private static MainViewModel CreateViewModel(
         FakeSettingsService? settings = null,
         FakeSourceScanner? scanner = null,
-        FakeProcessHost? host = null) =>
-        new(settings ?? new(), scanner ?? new(), host ?? new());
+        FakeProcessHost? host = null,
+        FakeSlideDeckMetadataReader? reader = null) =>
+        new(settings ?? new(), scanner ?? new(), host ?? new(), reader ?? new());
 
     private static PresentationProject MakeProject(string name = "Talk") => new()
     {
@@ -86,8 +95,6 @@ public class MainViewModelTests
         Location = "/tmp/" + name,
         SlidesFilePath = $"/tmp/{name}/slides.md"
     };
-
-    // ── Initial state ─────────────────────────────────────────────────────
 
     [Fact]
     public void InitialState_IsIdle_AndProjectsEmpty()
@@ -101,8 +108,6 @@ public class MainViewModelTests
         Assert.Empty(vm.Projects);
         Assert.Null(vm.SelectedProject);
     }
-
-    // ── RefreshLibraryAsync ───────────────────────────────────────────────
 
     [Fact]
     public async Task RefreshLibrary_PopulatesProjectsFromLocalRoot()
@@ -195,8 +200,6 @@ public class MainViewModelTests
         Assert.Empty(vm.Projects);
     }
 
-    // ── LaunchAsync ───────────────────────────────────────────────────────
-
     [Fact]
     public async Task LaunchAsync_WhenProjectSelected_CallsProcessHostStart()
     {
@@ -208,6 +211,7 @@ public class MainViewModelTests
 
         Assert.Equal(HostState.Starting, vm.HostState);
         Assert.True(vm.IsStarting);
+        Assert.Equal(1, host.StartCallCount);
     }
 
     [Fact]
@@ -226,6 +230,28 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public async Task LaunchAsync_ForHostedProject_DoesNotStartLocalProcessOrUsePort()
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(new PresentationProject
+        {
+            Id = Guid.NewGuid(),
+            Name = "Remote Talk",
+            SourceType = PresentationSourceType.HostedUrl,
+            Location = "https://slides.example.com/talk"
+        });
+
+        await vm.LaunchAsync();
+
+        Assert.Equal(HostState.Running, vm.HostState);
+        Assert.Equal(0, host.StartCallCount);
+        Assert.Null(vm.Port);
+        Assert.Equal("https://slides.example.com/talk", vm.ParticipantUrl);
+        Assert.Equal("https://slides.example.com/talk/presenter/", vm.PresenterUrl);
+    }
+
+    [Fact]
     public async Task LaunchAsync_WithNoSelectedProject_DoesNothing()
     {
         var host = new FakeProcessHost();
@@ -235,8 +261,6 @@ public class MainViewModelTests
 
         Assert.Equal(HostState.Idle, vm.HostState);
     }
-
-    // ── StopAsync ─────────────────────────────────────────────────────────
 
     [Fact]
     public async Task StopAsync_TransitionsToIdle()
@@ -252,7 +276,25 @@ public class MainViewModelTests
         Assert.True(vm.IsIdle);
     }
 
-    // ── Host state propagation ────────────────────────────────────────────
+    [Fact]
+    public async Task StopAsync_ForHostedSession_TransitionsToIdleWithoutStoppingProcessHost()
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(new PresentationProject
+        {
+            Id = Guid.NewGuid(),
+            Name = "Remote Talk",
+            SourceType = PresentationSourceType.HostedUrl,
+            Location = "https://slides.example.com/talk"
+        });
+        await vm.LaunchAsync();
+
+        await vm.StopAsync();
+
+        Assert.Equal(HostState.Idle, vm.HostState);
+        Assert.Equal(0, host.StopCallCount);
+    }
 
     [Fact]
     public async Task WhenHostTransitionsToRunning_ViewModelReflectsUrls()
@@ -285,8 +327,6 @@ public class MainViewModelTests
         Assert.Equal("Process exited with code 1.", vm.ErrorMessage);
     }
 
-    // ── RetryAsync ────────────────────────────────────────────────────────
-
     [Fact]
     public async Task RetryAsync_StopsAndRestarts()
     {
@@ -298,11 +338,35 @@ public class MainViewModelTests
 
         await vm.RetryAsync();
 
-        // After retry, host should have been stopped then started again
         Assert.Equal(HostState.Starting, vm.HostState);
+        Assert.Equal(2, host.StartCallCount);
+        Assert.Equal(1, host.StopCallCount);
     }
 
-    // ── CanExecute guards ─────────────────────────────────────────────────
+    [Fact]
+    public async Task SelectingProject_LoadsDeckMetadata()
+    {
+        var reader = new FakeSlideDeckMetadataReader
+        {
+            Metadata = new SlideDeckMetadata
+            {
+                DeckTitle = "Deck title",
+                Slides =
+                [
+                    new SlideDeckSlide(1, "Intro", "Welcome"),
+                    new SlideDeckSlide(2, "Agenda", "Plan")
+                ]
+            }
+        };
+        var vm = CreateViewModel(reader: reader);
+
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await Task.Delay(50);
+
+        Assert.Equal("Deck title", vm.DeckTitle);
+        Assert.Equal(2, vm.SlideCount);
+        Assert.Equal("Welcome", vm.SelectedSlideSummary);
+    }
 
     [Fact]
     public void LaunchCommand_CannotExecute_WhenNoProjectSelected()
@@ -316,9 +380,7 @@ public class MainViewModelTests
     {
         var host = new FakeProcessHost();
         var vm = CreateViewModel(host: host);
-        var pvm = new PresentationProjectViewModel(MakeProject());
-        vm.SelectedProject = pvm;
-        // manually put host in Starting state via SimulateRunning → then starting
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
         host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
 
         Assert.False(vm.LaunchCommand.CanExecute(null));
@@ -337,7 +399,7 @@ public class MainViewModelTests
         var host = new FakeProcessHost();
         var vm = CreateViewModel(host: host);
         vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
-        await vm.LaunchAsync(); // → Starting
+        await vm.LaunchAsync();
 
         Assert.True(vm.StopCommand.CanExecute(null));
     }

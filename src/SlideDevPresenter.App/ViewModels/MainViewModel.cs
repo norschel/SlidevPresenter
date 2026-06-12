@@ -21,6 +21,7 @@ public sealed partial class MainViewModel : ObservableObject
     private DateTimeOffset? _sessionStartedAt;
     private int _metadataLoadVersion;
     private bool _hasAutoOpenedForCurrentRun;
+    private bool _isHostedSessionActive;
 
     public ObservableCollection<PresentationProjectViewModel> Projects { get; } = [];
     public ObservableCollection<SlideDeckSlide> Slides { get; } = [];
@@ -164,33 +165,10 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void OnHostStateChanged(object? sender, HostStateChangedEventArgs e)
     {
-        void Update()
-        {
-            HostState = e.NewState;
-            ParticipantUrl = _processHost.ParticipantUrl;
-            PresenterUrl = _processHost.PresenterUrl;
-            Port = _processHost.Port;
-            ErrorMessage = e.ErrorMessage;
-            OnPropertyChanged(nameof(CurrentSurfaceUrl));
-            OnPropertyChanged(nameof(CurrentSurfaceUriOrBlank));
-            OnPropertyChanged(nameof(CanShowEmbeddedSurface));
-            OnPropertyChanged(nameof(CanShowBrowserFallback));
+        if (_isHostedSessionActive)
+            return;
 
-            if (e.NewState == HostState.Running)
-            {
-                StartSessionTimer();
-                AutoOpenConfiguredViews();
-            }
-            else if (e.NewState == HostState.Idle)
-            {
-                _hasAutoOpenedForCurrentRun = false;
-                StopSessionTimer(resetElapsed: true);
-            }
-            else if (e.NewState == HostState.Error)
-            {
-                StopSessionTimer(resetElapsed: false);
-            }
-        }
+        void Update() => ApplyStateSnapshot(e.NewState, _processHost.ParticipantUrl, _processHost.PresenterUrl, _processHost.Port, e.ErrorMessage);
 
         if (_syncContext is null || SynchronizationContext.Current == _syncContext)
             Update();
@@ -270,6 +248,13 @@ public sealed partial class MainViewModel : ObservableObject
         _hasAutoOpenedForCurrentRun = false;
         RefreshPreferences();
 
+        if (SelectedProject.SourceType == PresentationSourceType.HostedUrl)
+        {
+            StartHostedSession(SelectedProject.Location);
+            return;
+        }
+
+        _isHostedSessionActive = false;
         var port = _settingsService.Settings.Defaults.DefaultPort;
         await _processHost.StartAsync(SelectedProject.ToModel(), port);
     }
@@ -279,6 +264,12 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanStop))]
     public async Task StopAsync()
     {
+        if (_isHostedSessionActive)
+        {
+            StopHostedSession();
+            return;
+        }
+
         await _processHost.StopAsync();
     }
 
@@ -290,8 +281,16 @@ public sealed partial class MainViewModel : ObservableObject
         if (SelectedProject is null)
             return;
 
-        await _processHost.StopAsync();
         _hasAutoOpenedForCurrentRun = false;
+
+        if (_isHostedSessionActive || SelectedProject.SourceType == PresentationSourceType.HostedUrl)
+        {
+            StopHostedSession(resetElapsed: false);
+            StartHostedSession(SelectedProject.Location);
+            return;
+        }
+
+        await _processHost.StopAsync();
         var port = _settingsService.Settings.Defaults.DefaultPort;
         await _processHost.StartAsync(SelectedProject.ToModel(), port);
     }
@@ -368,6 +367,52 @@ public sealed partial class MainViewModel : ObservableObject
             _syncContext.Post(_ => Update(), null);
     }
 
+
+    private void StartHostedSession(string url)
+    {
+        _isHostedSessionActive = true;
+        ApplyStateSnapshot(
+            HostState.Running,
+            NormalizeHostedUrl(url),
+            BuildPresenterUrl(url),
+            null,
+            null);
+    }
+
+    private void StopHostedSession(bool resetElapsed = true)
+    {
+        _isHostedSessionActive = false;
+        ApplyStateSnapshot(HostState.Idle, null, null, null, null, resetElapsed);
+    }
+
+    private void ApplyStateSnapshot(HostState state, string? participantUrl, string? presenterUrl, int? port, string? errorMessage, bool resetElapsedOnIdle = true)
+    {
+        HostState = state;
+        ParticipantUrl = participantUrl;
+        PresenterUrl = presenterUrl;
+        Port = port;
+        ErrorMessage = errorMessage;
+        OnPropertyChanged(nameof(CurrentSurfaceUrl));
+        OnPropertyChanged(nameof(CurrentSurfaceUriOrBlank));
+        OnPropertyChanged(nameof(CanShowEmbeddedSurface));
+        OnPropertyChanged(nameof(CanShowBrowserFallback));
+
+        if (state == HostState.Running)
+        {
+            StartSessionTimer();
+            AutoOpenConfiguredViews();
+        }
+        else if (state == HostState.Idle)
+        {
+            _hasAutoOpenedForCurrentRun = false;
+            StopSessionTimer(resetElapsedOnIdle);
+        }
+        else if (state == HostState.Error)
+        {
+            StopSessionTimer(resetElapsed: false);
+        }
+    }
+
     private void TryOpenBrowser(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
@@ -437,6 +482,16 @@ public sealed partial class MainViewModel : ObservableObject
         _sessionStartedAt = null;
         if (resetElapsed)
             ElapsedPresentationTime = TimeSpan.Zero;
+    }
+
+    private static string NormalizeHostedUrl(string url) => url.Trim();
+
+    private static string BuildPresenterUrl(string url)
+    {
+        var normalized = NormalizeHostedUrl(url);
+        return normalized.Contains("/presenter", StringComparison.OrdinalIgnoreCase)
+            ? normalized
+            : normalized.TrimEnd('/') + "/presenter/";
     }
 
     private static PresentationSurfaceMode ParseSurfaceMode(string? mode) =>
