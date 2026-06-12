@@ -32,6 +32,7 @@ public partial class App : Application
 
             var mainViewModel = new MainViewModel(settingsService, sourceScanner, processHost, slideDeckMetadataReader, presentationWindowService, displayService);
             var mainWindow = new MainWindow(mainViewModel, shortcutService, themeService);
+            presentationWindowService.PresentationExited += (_, _) => mainWindow.Activate();
             desktop.MainWindow = mainWindow;
 
             mainWindow.Opened += async (_, _) =>
