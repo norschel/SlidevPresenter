@@ -61,7 +61,7 @@ public sealed class SlideDeckMetadataReader(ILogger<SlideDeckMetadataReader> log
 
         return new SlideDeckMetadata
         {
-            DeckTitle = slides.Count > 0 && !string.IsNullOrWhiteSpace(slides[0].Title) ? slides[0].Title : fallbackTitle,
+            DeckTitle = !string.IsNullOrWhiteSpace(slides[0].Title) ? slides[0].Title : fallbackTitle,
             Slides = slides
         };
     }

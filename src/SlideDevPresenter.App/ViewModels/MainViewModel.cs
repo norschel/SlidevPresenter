@@ -455,9 +455,16 @@ public sealed partial class MainViewModel : ObservableObject
 
     private async Task RunSessionTimerAsync(CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-        while (!cancellationToken.IsCancellationRequested && await timer.WaitForNextTickAsync(cancellationToken))
-            UpdateElapsedTime();
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            while (!cancellationToken.IsCancellationRequested && await timer.WaitForNextTickAsync(cancellationToken))
+                UpdateElapsedTime();
+        }
+        catch (OperationCanceledException)
+        {
+            // Timer cancellation is expected when the session stops.
+        }
     }
 
     private void UpdateElapsedTime()
