@@ -117,8 +117,10 @@ public partial class ParticipantWindow : Window
         // When the window exits fullscreen (e.g. via OS-level ESC on macOS, which never
         // reaches Avalonia's key routing), treat the state transition as an exit request.
         if (change.Property == WindowStateProperty
-            && change.OldValue is WindowState.FullScreen
-            && change.NewValue is not WindowState.FullScreen)
+            && change.OldValue is WindowState oldState
+            && change.NewValue is WindowState newState
+            && oldState == WindowState.FullScreen
+            && newState != WindowState.FullScreen)
         {
             RaisePresentationExited();
         }
