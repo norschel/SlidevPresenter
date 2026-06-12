@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -11,6 +12,7 @@ public partial class ParticipantWindow : Window
     private readonly IExternalBrowserLauncher _browserLauncher;
     private readonly WebViewNavigationPolicy _navigationPolicy;
     private readonly PresentationEscapeHandler _escapeHandler;
+    private bool _exitRaised;
 
     /// <summary>Raised when the user requests to exit the presentation (e.g. via ESC).</summary>
     public event EventHandler? PresentationExited;
@@ -100,5 +102,25 @@ public partial class ParticipantWindow : Window
         e.Handled = true;
     }
 
-    private void RaisePresentationExited() => PresentationExited?.Invoke(this, EventArgs.Empty);
+    private void RaisePresentationExited()
+    {
+        if (_exitRaised)
+            return;
+        _exitRaised = true;
+        PresentationExited?.Invoke(this, EventArgs.Empty);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        // When the window exits fullscreen (e.g. via OS-level ESC on macOS, which never
+        // reaches Avalonia's key routing), treat the state transition as an exit request.
+        if (change.Property == WindowStateProperty
+            && change.OldValue is WindowState.FullScreen
+            && change.NewValue is not WindowState.FullScreen)
+        {
+            RaisePresentationExited();
+        }
+    }
 }
