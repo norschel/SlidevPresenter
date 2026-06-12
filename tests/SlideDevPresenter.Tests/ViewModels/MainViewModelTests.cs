@@ -361,7 +361,6 @@ public class MainViewModelTests
         var vm = CreateViewModel(reader: reader);
 
         vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
-        await Task.Delay(50);
 
         Assert.Equal("Deck title", vm.DeckTitle);
         Assert.Equal(2, vm.SlideCount);

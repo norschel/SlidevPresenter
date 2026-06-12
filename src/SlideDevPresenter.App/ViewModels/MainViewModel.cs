@@ -489,9 +489,19 @@ public sealed partial class MainViewModel : ObservableObject
     private static string BuildPresenterUrl(string url)
     {
         var normalized = NormalizeHostedUrl(url);
-        return normalized.Contains("/presenter", StringComparison.OrdinalIgnoreCase)
-            ? normalized
-            : normalized.TrimEnd('/') + "/presenter/";
+        if (!Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
+            return normalized;
+
+        var trimmedPath = uri.AbsolutePath.TrimEnd('/');
+        if (trimmedPath.EndsWith("/presenter", StringComparison.OrdinalIgnoreCase))
+            return normalized;
+
+        var builder = new UriBuilder(uri)
+        {
+            Path = $"{trimmedPath}/presenter/"
+        };
+
+        return builder.Uri.ToString();
     }
 
     private static PresentationSurfaceMode ParseSurfaceMode(string? mode) =>

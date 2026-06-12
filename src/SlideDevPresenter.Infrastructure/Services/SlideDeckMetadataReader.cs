@@ -9,6 +9,7 @@ public sealed class SlideDeckMetadataReader(ILogger<SlideDeckMetadataReader> log
 {
     private static readonly Regex SlideDelimiterRegex = new(@"^---\s*$", RegexOptions.Multiline | RegexOptions.Compiled);
     private static readonly Regex HeadingRegex = new(@"^#{1,6}\s+(.*)$", RegexOptions.Multiline | RegexOptions.Compiled);
+    private static readonly Regex HtmlCommentRegex = new(@"<!--.*?-->", RegexOptions.Singleline | RegexOptions.Compiled);
 
     public async Task<SlideDeckMetadata> ReadAsync(PresentationProject project, CancellationToken cancellationToken = default)
     {
@@ -45,13 +46,14 @@ public sealed class SlideDeckMetadataReader(ILogger<SlideDeckMetadataReader> log
         for (var index = 0; index < sections.Count; index++)
         {
             var section = sections[index];
-            var heading = HeadingRegex.Match(section);
+            var commentFreeSection = HtmlCommentRegex.Replace(section, string.Empty);
+            var heading = HeadingRegex.Match(commentFreeSection);
             var title = heading.Success
                 ? heading.Groups[1].Value.Trim()
                 : $"Slide {index + 1}";
 
-            var summary = section.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .FirstOrDefault(line => !line.StartsWith('#') && !line.StartsWith("<!--", StringComparison.Ordinal))
+            var summary = commentFreeSection.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .FirstOrDefault(line => !line.StartsWith('#'))
                 ?? title;
 
             slides.Add(new SlideDeckSlide(index + 1, title, summary));
@@ -59,7 +61,7 @@ public sealed class SlideDeckMetadataReader(ILogger<SlideDeckMetadataReader> log
 
         return new SlideDeckMetadata
         {
-            DeckTitle = slides[0].Title.Length > 0 ? slides[0].Title : fallbackTitle,
+            DeckTitle = slides.Count > 0 && slides[0].Title.Length > 0 ? slides[0].Title : fallbackTitle,
             Slides = slides
         };
     }
