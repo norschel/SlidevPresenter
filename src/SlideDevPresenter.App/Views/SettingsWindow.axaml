@@ -1,0 +1,100 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SlideDevPresenter.App.ViewModels"
+        x:Class="SlideDevPresenter.App.Views.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        mc:Ignorable="d"
+        Width="760"
+        Height="540"
+        MinWidth="600"
+        MinHeight="420"
+        Title="Settings — SlideDevPresenter"
+        WindowStartupLocation="CenterOwner">
+
+    <Grid RowDefinitions="*,Auto" Margin="12">
+
+        <!-- Content -->
+        <TabControl Grid.Row="0">
+
+            <!-- Sources tab -->
+            <TabItem Header="Sources">
+                <Grid ColumnDefinitions="260,*" Margin="8">
+                    <Grid Grid.Column="0" RowDefinitions="*,Auto">
+                        <ListBox Grid.Row="0"
+                                 ItemsSource="{Binding Sources}"
+                                 SelectedItem="{Binding SelectedSource}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:SourceViewModel">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding Location}" FontSize="11" Opacity="0.6" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
+                            <Button Content="+ Root" Command="{Binding AddLocalRootSourceCommand}" ToolTip.Tip="Add local root folder"/>
+                            <Button Content="+ Project" Command="{Binding AddLocalProjectSourceCommand}" ToolTip.Tip="Add local project"/>
+                            <Button Content="+ URL" Command="{Binding AddHostedUrlSourceCommand}" ToolTip.Tip="Add hosted URL"/>
+                            <Button Content="Remove" Command="{Binding RemoveSelectedSourceCommand}" ToolTip.Tip="Remove selected source"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Grid.Column="1" Margin="12,0,0,0"
+                          IsVisible="{Binding SelectedSource, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Name"/>
+                            <TextBox Text="{Binding SelectedSource.Name}"/>
+                            <TextBlock Text="Location"/>
+                            <TextBox Text="{Binding SelectedSource.Location}"/>
+                            <CheckBox Content="Enabled" IsChecked="{Binding SelectedSource.IsEnabled}"/>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- Defaults tab -->
+            <TabItem Header="Defaults">
+                <StackPanel Spacing="10" Margin="12">
+                    <TextBlock Text="Default Port"/>
+                    <NumericUpDown Value="{Binding DefaultPort}" Minimum="1024" Maximum="65535" Increment="1"/>
+                    <CheckBox Content="Auto-increment port if occupied" IsChecked="{Binding AutoIncrementPorts}"/>
+                    <CheckBox Content="Open participant on second monitor" IsChecked="{Binding OpenParticipantOnSecondMonitor}"/>
+                    <CheckBox Content="Fullscreen participant window" IsChecked="{Binding FullscreenParticipant}"/>
+                    <CheckBox Content="Open presenter view on start" IsChecked="{Binding OpenPresenterOnStart}"/>
+                </StackPanel>
+            </TabItem>
+
+            <!-- Appearance tab -->
+            <TabItem Header="Appearance">
+                <StackPanel Spacing="10" Margin="12">
+                    <TextBlock Text="Theme"/>
+                    <ComboBox SelectedItem="{Binding Theme}" Width="180">
+                        <ComboBoxItem Content="System"/>
+                        <ComboBoxItem Content="Light"/>
+                        <ComboBoxItem Content="Dark"/>
+                    </ComboBox>
+                    <CheckBox Content="Show status bar" IsChecked="{Binding ShowStatusBar}"/>
+                    <CheckBox Content="Show ribbon" IsChecked="{Binding ShowRibbon}"/>
+                </StackPanel>
+            </TabItem>
+
+            <!-- WebView tab -->
+            <TabItem Header="WebView">
+                <StackPanel Spacing="10" Margin="12">
+                    <CheckBox Content="Prefer embedded WebView" IsChecked="{Binding PreferEmbeddedWebView}"/>
+                    <CheckBox Content="Allow external browser fallback" IsChecked="{Binding AllowExternalBrowserFallback}"/>
+                </StackPanel>
+            </TabItem>
+
+        </TabControl>
+
+        <!-- Action buttons -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
+            <Button Content="Save" Command="{Binding SaveCommand}"/>
+            <Button Content="Close" Click="Close_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

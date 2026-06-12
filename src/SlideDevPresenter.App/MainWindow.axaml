@@ -15,7 +15,7 @@
                 <ToggleButton Content="Home" IsChecked="True"/>
                 <ToggleButton Content="Library"/>
                 <ToggleButton Content="View"/>
-                <ToggleButton Content="Settings"/>
+                <Button Content="Settings" Click="Settings_Click"/>
             </StackPanel>
         </Border>
 
