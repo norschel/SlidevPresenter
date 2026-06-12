@@ -57,7 +57,13 @@ public sealed class SettingsService : ISettingsService
     {
         try
         {
-            var dir = Path.GetDirectoryName(_settingsFilePath)!;
+            var dir = Path.GetDirectoryName(_settingsFilePath);
+            if (string.IsNullOrEmpty(dir))
+            {
+                _logger.LogError("Cannot determine directory for settings path {Path}.", _settingsFilePath);
+                return;
+            }
+
             Directory.CreateDirectory(dir);
 
             await using var stream = File.Open(_settingsFilePath, FileMode.Create, FileAccess.Write);

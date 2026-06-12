@@ -12,10 +12,11 @@
     <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="280,*">
         <Border Grid.Row="0" Grid.ColumnSpan="2" Background="#202020" Padding="12">
             <StackPanel Orientation="Horizontal" Spacing="12">
+                <!-- Home/Library/View are tab selectors; Settings opens a dialog -->
                 <ToggleButton Content="Home" IsChecked="True"/>
                 <ToggleButton Content="Library"/>
                 <ToggleButton Content="View"/>
-                <Button Content="Settings" Click="Settings_Click"/>
+                <Button Content="Settings" Click="Settings_Click" ToolTip.Tip="Open application settings"/>
             </StackPanel>
         </Border>
 

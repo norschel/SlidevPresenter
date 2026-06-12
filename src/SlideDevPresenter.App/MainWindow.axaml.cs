@@ -8,9 +8,13 @@ namespace SlideDevPresenter.App;
 
 public partial class MainWindow : Window
 {
-    private readonly ISettingsService _settingsService;
+    private readonly ISettingsService? _settingsService;
 
-    public MainWindow() : this(null!) { }
+    /// <summary>Parameterless constructor for Avalonia designer.</summary>
+    public MainWindow()
+    {
+        InitializeComponent();
+    }
 
     public MainWindow(ISettingsService settingsService)
     {
@@ -20,6 +24,9 @@ public partial class MainWindow : Window
 
     private void Settings_Click(object? sender, RoutedEventArgs e)
     {
+        if (_settingsService is null)
+            return;
+
         var vm = new SettingsViewModel(_settingsService);
         var win = new SettingsWindow(vm);
         win.ShowDialog(this);

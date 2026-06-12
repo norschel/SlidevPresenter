@@ -22,10 +22,14 @@ public partial class App : Application
             var loggerFactory = LoggerFactory.Create(builder => builder.AddDebug());
             _settingsService = new SettingsService(loggerFactory.CreateLogger<SettingsService>());
 
-            // Load settings synchronously during startup
-            _settingsService.LoadAsync().GetAwaiter().GetResult();
+            var mainWindow = new MainWindow(_settingsService);
+            desktop.MainWindow = mainWindow;
 
-            desktop.MainWindow = new MainWindow(_settingsService);
+            // Load settings asynchronously after the application is ready
+            mainWindow.Opened += async (_, _) =>
+            {
+                await _settingsService.LoadAsync();
+            };
         }
 
         base.OnFrameworkInitializationCompleted();

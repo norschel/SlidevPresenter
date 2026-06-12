@@ -7,7 +7,7 @@ namespace SlideDevPresenter.Tests.Services;
 public class SourceScannerTests : IDisposable
 {
     private readonly SourceScanner _scanner = new(NullLogger<SourceScanner>.Instance);
-    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), "SlidevScannerTests_" + Guid.NewGuid());
+    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), "SourceScannerTests_" + Guid.NewGuid());
 
     public SourceScannerTests() => Directory.CreateDirectory(_tempRoot);
 
@@ -168,7 +168,8 @@ public class SourceScannerTests : IDisposable
     [Fact]
     public void ExpandHomePath_ReturnsSamePathForAbsolutePath()
     {
-        var absolute = "/usr/local/presentations";
+        // Use a rooted path that is valid on all platforms
+        var absolute = Path.GetFullPath("presentations");
         Assert.Equal(absolute, SourceScanner.ExpandHomePath(absolute));
     }
 }
