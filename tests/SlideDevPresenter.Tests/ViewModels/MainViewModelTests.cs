@@ -484,7 +484,7 @@ public class MainViewModelTests
     }
 
     [Fact]
-    public async Task WhenHostRunning_WithSingleDisplay_DoesNotOpenPresentationWindowService()
+    public async Task WhenHostRunning_WithSingleDisplay_OpensPresentationWindowService()
     {
         var settings = new FakeSettingsService();
         settings.Settings.DisplayManagement.AutoDetectDisplays = true;
@@ -499,7 +499,9 @@ public class MainViewModelTests
 
         host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
 
-        Assert.Equal(0, windowService.OpenCallCount);
+        Assert.Equal(1, windowService.OpenCallCount);
+        Assert.Equal("http://localhost:3030/", windowService.LastParticipantUrl);
+        Assert.Equal("http://localhost:3030/presenter/", windowService.LastPresenterUrl);
     }
 
     [Fact]

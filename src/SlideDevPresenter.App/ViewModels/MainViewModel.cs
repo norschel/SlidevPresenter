@@ -680,8 +680,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private bool ShouldOpenParticipantWindow(string? participantUrl) =>
         _settingsService.Settings.DisplayManagement.AutoDetectDisplays &&
-        !string.IsNullOrWhiteSpace(participantUrl) &&
-        _displayService.GetDisplays().Count >= 2;
+        !string.IsNullOrWhiteSpace(participantUrl);
 
     private static string? BuildSlideNavigationUrl(string? url, int slideNumber)
     {
