@@ -104,6 +104,12 @@ internal sealed class FakePresentationWindowService : IPresentationWindowService
     public void SimulateEscPressed() => PresentationExited?.Invoke(this, EventArgs.Empty);
 }
 
+internal sealed class FakeDisplayService : IDisplayService
+{
+    public List<DisplayInfo> Displays { get; } = [];
+    public IReadOnlyList<DisplayInfo> GetDisplays() => Displays.AsReadOnly();
+}
+
 public class MainViewModelTests
 {
     private static MainViewModel CreateViewModel(
@@ -111,8 +117,9 @@ public class MainViewModelTests
         FakeSourceScanner? scanner = null,
         FakeProcessHost? host = null,
         FakeSlideDeckMetadataReader? reader = null,
-        FakePresentationWindowService? windowService = null) =>
-        new(settings ?? new(), scanner ?? new(), host ?? new(), reader ?? new(), windowService ?? new());
+        FakePresentationWindowService? windowService = null,
+        FakeDisplayService? displayService = null) =>
+        new(settings ?? new(), scanner ?? new(), host ?? new(), reader ?? new(), windowService ?? new(), displayService ?? new());
 
     private static PresentationProject MakeProject(string name = "Talk") => new()
     {
@@ -528,5 +535,29 @@ public class MainViewModelTests
         vm.SelectPresentationRibbon();
         Assert.True(vm.IsPresentationRibbonSelected);
         Assert.False(vm.IsHomeRibbonSelected);
+    }
+
+    [Fact]
+    public void DetectDisplays_UpdatesDetectedDisplayCount()
+    {
+        var displayService = new FakeDisplayService();
+        displayService.Displays.Add(new DisplayInfo(0, true, 0, 0, 1920, 1080));
+        displayService.Displays.Add(new DisplayInfo(1, false, 1920, 0, 1920, 1080));
+
+        var vm = CreateViewModel(displayService: displayService);
+        vm.DetectDisplays();
+
+        Assert.Equal(2, vm.DetectedDisplayCount);
+        Assert.True(vm.HasDetectedDisplays);
+    }
+
+    [Fact]
+    public void DetectDisplays_WhenNoDisplaysReported_HasDetectedDisplaysIsFalse()
+    {
+        var vm = CreateViewModel();
+        vm.DetectDisplays();
+
+        Assert.Equal(0, vm.DetectedDisplayCount);
+        Assert.False(vm.HasDetectedDisplays);
     }
 }

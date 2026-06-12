@@ -44,6 +44,7 @@ public sealed class PresentationWindowService : IPresentationWindowService
         // On multi-display setups move the participant window to the secondary display before showing
         if (displays.Count >= 2 && settings.AutoDetectDisplays)
         {
+            // Prefer the first non-primary display; if all report as primary fall back to index 1.
             var secondary = displays.FirstOrDefault(d => !d.IsPrimary) ?? displays[1];
             _participantWindow.Position = new PixelPoint(secondary.X + 10, secondary.Y + 10);
         }

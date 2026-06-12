@@ -28,7 +28,7 @@ public partial class App : Application
             var displayService = new AvaloniaDisplayService();
             var presentationWindowService = new PresentationWindowService(displayService, settingsService);
 
-            var mainViewModel = new MainViewModel(settingsService, sourceScanner, processHost, slideDeckMetadataReader, presentationWindowService);
+            var mainViewModel = new MainViewModel(settingsService, sourceScanner, processHost, slideDeckMetadataReader, presentationWindowService, displayService);
             var mainWindow = new MainWindow(mainViewModel);
             desktop.MainWindow = mainWindow;
 

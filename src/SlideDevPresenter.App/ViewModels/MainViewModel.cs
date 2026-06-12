@@ -17,6 +17,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly ISlidevProcessHost _processHost;
     private readonly ISlideDeckMetadataReader _slideDeckMetadataReader;
     private readonly IPresentationWindowService _presentationWindowService;
+    private readonly IDisplayService _displayService;
     private readonly SynchronizationContext? _syncContext;
     private CancellationTokenSource? _timerCts;
     private DateTimeOffset? _sessionStartedAt;
@@ -101,7 +102,10 @@ public sealed partial class MainViewModel : ObservableObject
     private TimeSpan _elapsedPresentationTime;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDetectedDisplays))]
     private int _detectedDisplayCount;
+
+    public bool HasDetectedDisplays => DetectedDisplayCount > 0;
 
     public bool IsIdle => HostState == HostState.Idle;
     public bool IsStarting => HostState == HostState.Starting;
@@ -143,12 +147,18 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService)
+        : this(settingsService, sourceScanner, processHost, slideDeckMetadataReader, presentationWindowService, new NullDisplayService())
+    {
+    }
+
+    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService, IDisplayService displayService)
     {
         _settingsService = settingsService;
         _sourceScanner = sourceScanner;
         _processHost = processHost;
         _slideDeckMetadataReader = slideDeckMetadataReader;
         _presentationWindowService = presentationWindowService;
+        _displayService = displayService;
         _syncContext = SynchronizationContext.Current;
         _selectedSurfaceMode = ParseSurfaceMode(settingsService.Settings.Defaults.DefaultMode);
 
@@ -349,11 +359,7 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     public void DetectDisplays()
     {
-        // Refresh detected display count — reported via DetectedDisplayCount property
-        // IDisplayService is resolved via PresentationWindowService; here we re-use the count
-        // that was detected at last presentation start (if any). The command also serves as a
-        // manual trigger to surface the current display topology to the user.
-        OnPropertyChanged(nameof(DetectedDisplayCount));
+        DetectedDisplayCount = _displayService.GetDisplays().Count;
     }
 
     private void OnPresentationExited(object? sender, EventArgs e)
@@ -574,5 +580,10 @@ public sealed partial class MainViewModel : ObservableObject
 #pragma warning restore CS0067
         public Task OpenAsync(string participantUrl, string? presenterUrl, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task CloseAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class NullDisplayService : IDisplayService
+    {
+        public IReadOnlyList<DisplayInfo> GetDisplays() => [];
     }
 }
