@@ -11,7 +11,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ISettingsService _settingsService;
 
     public ObservableCollection<SourceViewModel> Sources { get; } = [];
-    public IReadOnlyList<string> AvailableModes { get; } = [nameof(PresentationSurfaceMode.Presenter), nameof(PresentationSurfaceMode.Participant)];
+    public IReadOnlyList<string> AvailableModes { get; } = Enum.GetNames<PresentationSurfaceMode>();
 
     [ObservableProperty]
     private SourceViewModel? _selectedSource;
