@@ -14,6 +14,7 @@ public partial class MainWindow : Window
     private readonly IThemeService _themeService;
     private readonly IExternalBrowserLauncher _browserLauncher;
     private readonly WebViewNavigationPolicy _navigationPolicy;
+    private readonly List<KeyBinding> _presentationKeyBindings = [];
 
     /// <summary>Parameterless constructor for Avalonia designer.</summary>
     public MainWindow()
@@ -156,22 +157,28 @@ public partial class MainWindow : Window
         if (_viewModel is null)
             return;
 
-        KeyBindings.Clear();
-        KeyBindings.Add(new KeyBinding
+        foreach (var binding in _presentationKeyBindings)
+            KeyBindings.Remove(binding);
+        _presentationKeyBindings.Clear();
+
+        _presentationKeyBindings.Add(new KeyBinding
         {
             Gesture = _shortcutService.GetGesture(PresentationShortcutAction.StartFromBeginning),
             Command = _viewModel.StartFromBeginningCommand
         });
-        KeyBindings.Add(new KeyBinding
+        _presentationKeyBindings.Add(new KeyBinding
         {
             Gesture = _shortcutService.GetGesture(PresentationShortcutAction.StartFromCurrentSlide),
             Command = _viewModel.StartFromCurrentSlideCommand
         });
-        KeyBindings.Add(new KeyBinding
+        _presentationKeyBindings.Add(new KeyBinding
         {
             Gesture = _shortcutService.GetGesture(PresentationShortcutAction.StartPresenterView),
             Command = _viewModel.StartPresenterViewCommand
         });
+
+        foreach (var binding in _presentationKeyBindings)
+            KeyBindings.Add(binding);
     }
 
     private void ConfigureShortcutTooltips()
