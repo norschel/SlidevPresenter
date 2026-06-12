@@ -2,14 +2,13 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Microsoft.Extensions.Logging;
+using SlideDevPresenter.App.ViewModels;
 using SlideDevPresenter.Infrastructure.Services;
 
 namespace SlideDevPresenter.App;
 
 public partial class App : Application
 {
-    private SettingsService? _settingsService;
-
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -20,15 +19,19 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var loggerFactory = LoggerFactory.Create(builder => builder.AddDebug());
-            _settingsService = new SettingsService(loggerFactory.CreateLogger<SettingsService>());
 
-            var mainWindow = new MainWindow(_settingsService);
+            var settingsService = new SettingsService(loggerFactory.CreateLogger<SettingsService>());
+            var sourceScanner = new SourceScanner(loggerFactory.CreateLogger<SourceScanner>());
+            var processHost = new SlidevProcessHost(loggerFactory.CreateLogger<SlidevProcessHost>());
+
+            var mainViewModel = new MainViewModel(settingsService, sourceScanner, processHost);
+            var mainWindow = new MainWindow(mainViewModel);
             desktop.MainWindow = mainWindow;
 
-            // Load settings asynchronously after the application is ready
             mainWindow.Opened += async (_, _) =>
             {
-                await _settingsService.LoadAsync();
+                await settingsService.LoadAsync();
+                await mainViewModel.RefreshLibraryAsync();
             };
         }
 

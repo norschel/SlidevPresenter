@@ -2,13 +2,12 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using SlideDevPresenter.App.ViewModels;
 using SlideDevPresenter.App.Views;
-using SlideDevPresenter.Core.Services;
 
 namespace SlideDevPresenter.App;
 
 public partial class MainWindow : Window
 {
-    private readonly ISettingsService? _settingsService;
+    private readonly MainViewModel? _viewModel;
 
     /// <summary>Parameterless constructor for Avalonia designer.</summary>
     public MainWindow()
@@ -16,18 +15,19 @@ public partial class MainWindow : Window
         InitializeComponent();
     }
 
-    public MainWindow(ISettingsService settingsService)
+    public MainWindow(MainViewModel viewModel)
     {
-        _settingsService = settingsService;
+        _viewModel = viewModel;
+        DataContext = viewModel;
         InitializeComponent();
     }
 
     private void Settings_Click(object? sender, RoutedEventArgs e)
     {
-        if (_settingsService is null)
+        if (_viewModel is null)
             return;
 
-        var vm = new SettingsViewModel(_settingsService);
+        var vm = new SettingsViewModel(_viewModel.SettingsService);
         var win = new SettingsWindow(vm);
         win.ShowDialog(this);
     }

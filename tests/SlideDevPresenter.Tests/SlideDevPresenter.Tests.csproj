@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\SlideDevPresenter.Core\SlideDevPresenter.Core.csproj" />
     <ProjectReference Include="..\..\src\SlideDevPresenter.Infrastructure\SlideDevPresenter.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\SlideDevPresenter.App\SlideDevPresenter.App.csproj" />
   </ItemGroup>
 
 </Project>

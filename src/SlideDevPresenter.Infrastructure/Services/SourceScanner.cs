@@ -78,8 +78,10 @@ public sealed class SourceScanner : ISourceScanner
 
     public bool IsSlidevProject(string directoryPath)
     {
-        if (!Directory.Exists(directoryPath))
+        var expandedPath = ExpandHomePath(directoryPath);
+        if (!Directory.Exists(expandedPath))
             return false;
+        directoryPath = expandedPath;
 
         // 1. slides.md exists
         if (File.Exists(Path.Combine(directoryPath, "slides.md")))
@@ -162,7 +164,7 @@ public sealed class SourceScanner : ISourceScanner
         return Directory.EnumerateFiles(directoryPath, "*.md", SearchOption.TopDirectoryOnly).Any();
     }
 
-    internal static string ExpandHomePath(string path)
+    public static string ExpandHomePath(string path)
     {
         if (path.StartsWith("~/", StringComparison.Ordinal) || path == "~")
         {
