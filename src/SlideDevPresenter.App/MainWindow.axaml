@@ -1,0 +1,40 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        x:Class="SlideDevPresenter.App.MainWindow"
+        mc:Ignorable="d"
+        Width="1280"
+        Height="800"
+        MinWidth="960"
+        MinHeight="600"
+        Title="SlideDevPresenter">
+    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="280,*">
+        <Border Grid.Row="0" Grid.ColumnSpan="2" Background="#202020" Padding="12">
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <ToggleButton Content="Home" IsChecked="True"/>
+                <ToggleButton Content="Library"/>
+                <ToggleButton Content="View"/>
+                <ToggleButton Content="Settings"/>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="1" Grid.Column="0" Background="#2A2A2A" Padding="12">
+            <StackPanel Spacing="8">
+                <TextBlock Text="Library / Thumbnails / Agenda" FontWeight="SemiBold"/>
+                <TextBlock Text="Placeholder panel for presentation navigation." TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="1" Grid.Column="1" Background="#1A1A1A" Padding="12">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                <TextBlock Text="Embedded Slidev Presenter View" FontSize="22" FontWeight="SemiBold"/>
+                <TextBlock Text="WebView host placeholder (Milestone 1)."/>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#202020" Padding="8">
+            <TextBlock Text="Timer | Status | Port | Participant URL | Slidev State"/>
+        </Border>
+    </Grid>
+</Window>
