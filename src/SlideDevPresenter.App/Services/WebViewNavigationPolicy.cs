@@ -8,7 +8,7 @@ public sealed class WebViewNavigationPolicy
             return !IsInternalRelative(request);
 
         if (!IsWebScheme(request))
-            return false;
+            return true;
 
         if (IsInternalSlideNavigation(request, current))
             return false;

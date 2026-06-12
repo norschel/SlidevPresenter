@@ -46,4 +46,14 @@ public sealed class WebViewNavigationPolicyTests
 
         Assert.True(result);
     }
+
+    [Fact]
+    public void ShouldOpenExternally_ForNonWebScheme_ReturnsTrue()
+    {
+        var request = new Uri("mailto:test@example.com");
+
+        var result = _policy.ShouldOpenExternally(request, new Uri("http://localhost:3030/"));
+
+        Assert.True(result);
+    }
 }

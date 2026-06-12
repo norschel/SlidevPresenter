@@ -592,16 +592,16 @@ public sealed partial class MainViewModel : ObservableObject
 
     private async Task StartForSlideAsync(int slideNumber, PresentationSurfaceMode surfaceMode)
     {
-        var normalizedSlide = Math.Max(1, slideNumber);
+        var clampedSlideNumber = Math.Max(1, slideNumber);
         SelectedSurfaceMode = surfaceMode;
 
         if (HostState == HostState.Running)
         {
-            NavigateRunningSessionToSlide(normalizedSlide);
+            NavigateRunningSessionToSlide(clampedSlideNumber);
             return;
         }
 
-        _pendingSlideNavigation = normalizedSlide;
+        _pendingSlideNavigation = clampedSlideNumber;
         await LaunchAsync();
     }
 
@@ -614,8 +614,9 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CanShowEmbeddedSurface));
         OnPropertyChanged(nameof(CanShowBrowserFallback));
 
-        if (_settingsService.Settings.DisplayManagement.AutoDetectDisplays && !string.IsNullOrWhiteSpace(ParticipantUrl))
-            _ = _presentationWindowService.OpenAsync(ParticipantUrl!, PresenterUrl);
+        var participantUrl = ParticipantUrl;
+        if (_settingsService.Settings.DisplayManagement.AutoDetectDisplays && !string.IsNullOrWhiteSpace(participantUrl))
+            _ = _presentationWindowService.OpenAsync(participantUrl, PresenterUrl);
     }
 
     private static string? BuildSlideNavigationUrl(string? url, int slideNumber)

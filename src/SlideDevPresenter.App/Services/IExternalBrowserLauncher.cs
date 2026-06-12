@@ -11,6 +11,13 @@ public sealed class ExternalBrowserLauncher : IExternalBrowserLauncher
 {
     public void Open(Uri uri)
     {
-        Process.Start(new ProcessStartInfo(uri.ToString()) { UseShellExecute = true });
+        try
+        {
+            Process.Start(new ProcessStartInfo(uri.ToString()) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to open external URI '{uri}': {ex.Message}");
+        }
     }
 }
