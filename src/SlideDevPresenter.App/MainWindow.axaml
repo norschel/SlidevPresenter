@@ -3,166 +3,205 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:SlideDevPresenter.App.ViewModels"
+        xmlns:models="using:SlideDevPresenter.Core.Models"
         x:Class="SlideDevPresenter.App.MainWindow"
         x:DataType="vm:MainViewModel"
         mc:Ignorable="d"
-        Width="1280"
-        Height="800"
-        MinWidth="960"
-        MinHeight="600"
+        Width="1440"
+        Height="900"
+        MinWidth="1100"
+        MinHeight="700"
         Title="SlideDevPresenter">
-    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="280,*">
+    <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="320,*">
 
-        <!-- Ribbon header -->
-        <Border Grid.Row="0" Grid.ColumnSpan="2" Background="#202020" Padding="12">
-            <StackPanel Orientation="Horizontal" Spacing="12">
-                <ToggleButton Content="Home" IsChecked="True"/>
-                <ToggleButton Content="Library"/>
-                <ToggleButton Content="View"/>
-                <Button Content="Settings" Click="Settings_Click" ToolTip.Tip="Open application settings"/>
-            </StackPanel>
+        <Border Grid.Row="0" Grid.ColumnSpan="2" Background="#202020" Padding="12" IsVisible="{Binding ShowRibbon}">
+            <Grid RowDefinitions="Auto,Auto">
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <ToggleButton Content="Home" IsChecked="{Binding IsHomeRibbonSelected, Mode=OneWay}" Command="{Binding SelectHomeRibbonCommand}"/>
+                    <ToggleButton Content="Library" IsChecked="{Binding IsLibraryRibbonSelected, Mode=OneWay}" Command="{Binding SelectLibraryRibbonCommand}"/>
+                    <ToggleButton Content="View" IsChecked="{Binding IsViewRibbonSelected, Mode=OneWay}" Command="{Binding SelectViewRibbonCommand}"/>
+                    <Button Content="Settings" Click="Settings_Click" ToolTip.Tip="Open application settings"/>
+                </StackPanel>
+
+                <Border Grid.Row="1" Margin="0,12,0,0" Background="#2D2D2D" CornerRadius="8" Padding="12">
+                    <Panel>
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsHomeRibbonSelected}">
+                            <Button Content="▶ Launch" Command="{Binding LaunchCommand}"/>
+                            <Button Content="■ Stop" Command="{Binding StopCommand}"/>
+                            <Button Content="↻ Retry" Command="{Binding RetryCommand}"/>
+                            <Button Content="Open Current View" Command="{Binding OpenCurrentSurfaceInBrowserCommand}" IsVisible="{Binding CanShowBrowserFallback}"/>
+                            <TextBlock Text="{Binding CurrentSurfaceLabel}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsLibraryRibbonSelected}">
+                            <Button Content="↻ Refresh Library" Command="{Binding RefreshLibraryCommand}"/>
+                            <TextBlock Text="{Binding DeckTitle}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            <TextBlock Text="{Binding SlideCount, StringFormat='Slides: {0}'}" VerticalAlignment="Center" Opacity="0.7"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsViewRibbonSelected}">
+                            <Button Content="Presenter" Command="{Binding UsePresenterSurfaceCommand}"/>
+                            <Button Content="Participant" Command="{Binding UseParticipantSurfaceCommand}"/>
+                            <Button Content="Thumbnails" Command="{Binding ToggleThumbnailsPanelCommand}"/>
+                            <Button Content="Agenda" Command="{Binding ToggleAgendaPanelCommand}"/>
+                            <Button Content="Timer" Command="{Binding ToggleTimerPanelCommand}"/>
+                        </StackPanel>
+                    </Panel>
+                </Border>
+            </Grid>
         </Border>
 
-        <!-- Left: Library panel -->
-        <Border Grid.Row="1" Grid.Column="0" Background="#2A2A2A" Padding="12">
-            <Grid RowDefinitions="Auto,*,Auto">
-                <TextBlock Grid.Row="0"
-                           Text="Library"
-                           FontWeight="SemiBold"
-                           Margin="0,0,0,8"/>
+        <Border Grid.Row="1" Grid.Column="0" Background="#262626" Padding="12">
+            <Grid RowDefinitions="Auto,*,Auto,Auto">
+                <TextBlock Grid.Row="0" Text="Library" FontWeight="SemiBold" Margin="0,0,0,8"/>
 
-                <ListBox Grid.Row="1"
-                         ItemsSource="{Binding Projects}"
-                         SelectedItem="{Binding SelectedProject}">
+                <ListBox Grid.Row="1" ItemsSource="{Binding Projects}" SelectedItem="{Binding SelectedProject}">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:PresentationProjectViewModel">
-                            <StackPanel Spacing="2" Margin="0,2">
+                            <StackPanel Spacing="2" Margin="0,4">
                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
-                                <TextBlock Text="{Binding Location}"
-                                           FontSize="11"
-                                           Opacity="0.6"
-                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Location}" FontSize="11" Opacity="0.6" TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
 
-                <Button Grid.Row="2"
-                        Content="↻ Refresh Library"
-                        Command="{Binding RefreshLibraryCommand}"
-                        HorizontalAlignment="Stretch"
-                        Margin="0,8,0,0"/>
+                <Border Grid.Row="2" Margin="0,12,0,0" Background="#303030" CornerRadius="8" Padding="10">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="{Binding DeckTitle}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding SlideCount, StringFormat='Slides loaded: {0}'}" Opacity="0.7"/>
+                        <TextBlock Text="{Binding SelectedSlideSummary}" TextWrapping="Wrap" Opacity="0.8" FontSize="12"/>
+                    </StackPanel>
+                </Border>
+
+                <Button Grid.Row="3" Content="↻ Refresh Library" Command="{Binding RefreshLibraryCommand}" HorizontalAlignment="Stretch" Margin="0,12,0,0"/>
             </Grid>
         </Border>
 
-        <!-- Right: State-based presenter area -->
-        <Border Grid.Row="1" Grid.Column="1" Background="#1A1A1A" Padding="24">
+        <Border Grid.Row="1" Grid.Column="1" Background="#171717" Padding="20">
             <Panel>
-
-                <!-- Idle: no project selected or ready to launch -->
-                <StackPanel IsVisible="{Binding IsIdle}"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Spacing="16">
-                    <TextBlock Text="Slidev Presenter"
-                               FontSize="22"
-                               FontWeight="SemiBold"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="Select a presentation from the library, then click Launch."
-                               Opacity="0.6"
-                               HorizontalAlignment="Center"
-                               TextWrapping="Wrap"/>
-                    <Button Content="▶  Launch"
-                            Command="{Binding LaunchCommand}"
-                            HorizontalAlignment="Center"
-                            Padding="16,8"/>
+                <StackPanel IsVisible="{Binding IsIdle}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16" MaxWidth="520">
+                    <TextBlock Text="SlideDevPresenter" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Select a presentation, launch Slidev, then switch between embedded presenter and participant workflows from the ribbon." Opacity="0.7" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                    <Button Content="▶ Launch" Command="{Binding LaunchCommand}" HorizontalAlignment="Center" Padding="16,8"/>
                 </StackPanel>
 
-                <!-- Starting: Slidev process is spinning up -->
-                <StackPanel IsVisible="{Binding IsStarting}"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Spacing="16">
-                    <TextBlock Text="Starting Slidev…"
-                               FontSize="18"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="Waiting for the dev server to become ready."
-                               Opacity="0.6"
-                               HorizontalAlignment="Center"/>
-                    <Button Content="■  Stop"
-                            Command="{Binding StopCommand}"
-                            HorizontalAlignment="Center"
-                            Padding="16,8"/>
+                <StackPanel IsVisible="{Binding IsStarting}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
+                    <TextBlock Text="Starting Slidev…" FontSize="18" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Preparing the selected deck and waiting for Slidev to report its local URL." Opacity="0.7" HorizontalAlignment="Center" TextAlignment="Center"/>
+                    <Button Content="■ Stop" Command="{Binding StopCommand}" HorizontalAlignment="Center" Padding="16,8"/>
                 </StackPanel>
 
-                <!-- Running: server is ready -->
-                <StackPanel IsVisible="{Binding IsRunning}"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Spacing="12">
-                    <TextBlock Text="Slidev is running"
-                               FontSize="18"
-                               FontWeight="SemiBold"
-                               HorizontalAlignment="Center"/>
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Participant URL:" Opacity="0.6" FontSize="12"/>
-                        <TextBlock Text="{Binding ParticipantUrl}" FontFamily="Monospace"/>
-                    </StackPanel>
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Presenter URL:" Opacity="0.6" FontSize="12"/>
-                        <TextBlock Text="{Binding PresenterUrl}" FontFamily="Monospace"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0,8,0,0">
-                        <Button Content="Open in Browser"
-                                Command="{Binding OpenExternalBrowserCommand}"
-                                Padding="12,6"/>
-                        <Button Content="■  Stop"
-                                Command="{Binding StopCommand}"
-                                Padding="12,6"/>
+                <Grid IsVisible="{Binding IsRunning}" RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,340" ColumnSpacing="16" RowSpacing="16">
+                    <Grid Grid.Row="0" Grid.ColumnSpan="2" ColumnDefinitions="*,*" ColumnSpacing="12">
+                        <Border Grid.Column="0" Background="#222222" CornerRadius="10" Padding="12">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="{Binding CurrentSurfaceLabel}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding CurrentSurfaceUrl}" FontFamily="Consolas" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="Open Current" Command="{Binding OpenCurrentSurfaceInBrowserCommand}" IsVisible="{Binding CanShowBrowserFallback}"/>
+                                    <Button Content="Presenter" Command="{Binding UsePresenterSurfaceCommand}"/>
+                                    <Button Content="Participant" Command="{Binding UseParticipantSurfaceCommand}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="1" Background="#222222" CornerRadius="10" Padding="12">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Browser workflow" FontWeight="SemiBold"/>
+                                <TextBlock Text="Use presenter and participant URLs together when driving a deck across multiple displays." Opacity="0.7" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="Open Presenter" Command="{Binding OpenPresenterBrowserCommand}" IsVisible="{Binding CanShowBrowserFallback}"/>
+                                    <Button Content="Open Participant" Command="{Binding OpenParticipantBrowserCommand}" IsVisible="{Binding CanShowBrowserFallback}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border Grid.Row="1" Grid.Column="0" Background="#101010" CornerRadius="12" Padding="8">
+                        <Panel>
+                            <NativeWebView IsVisible="{Binding CanShowEmbeddedSurface}" Source="{Binding CurrentSurfaceUriOrBlank}"/>
+                            <StackPanel IsVisible="{Binding CanShowEmbeddedSurface, Converter={x:Static BoolConverters.Not}}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="420">
+                                <TextBlock Text="Embedded preview unavailable" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding EmbeddedSurfaceHint}" TextWrapping="Wrap" TextAlignment="Center" Opacity="0.7"/>
+                                <Button Content="Open Current View in Browser" Command="{Binding OpenCurrentSurfaceInBrowserCommand}" IsVisible="{Binding CanShowBrowserFallback}" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Panel>
+                    </Border>
+
+                    <ScrollViewer Grid.Row="1" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="12">
+                            <Border Background="#222222" CornerRadius="10" Padding="12" IsVisible="{Binding ShowThumbnailsPanel}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Thumbnails" FontWeight="SemiBold"/>
+                                    <ListBox ItemsSource="{Binding Slides}" SelectedItem="{Binding SelectedOutlineSlide}">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate x:DataType="models:SlideDeckSlide">
+                                                <Border Background="#303030" CornerRadius="8" Padding="10" Margin="0,0,0,8">
+                                                    <StackPanel Spacing="2">
+                                                        <TextBlock Text="{Binding Number, StringFormat='Slide {0}'}" FontSize="11" Opacity="0.65"/>
+                                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                                        <TextBlock Text="{Binding Summary}" FontSize="11" Opacity="0.75" TextWrapping="Wrap" MaxHeight="34"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#222222" CornerRadius="10" Padding="12" IsVisible="{Binding ShowAgendaPanel}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Agenda" FontWeight="SemiBold"/>
+                                    <ItemsControl ItemsSource="{Binding Slides}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="models:SlideDeckSlide">
+                                                <StackPanel Margin="0,0,0,8">
+                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{Binding Summary}" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#222222" CornerRadius="10" Padding="12" IsVisible="{Binding ShowTimerPanel}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Timer" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding ElapsedPresentationTimeText}" FontSize="24" FontFamily="Consolas"/>
+                                    <TextBlock Text="{Binding SlideCount, StringFormat='Tracking {0} slides in the current deck.'}" Opacity="0.7" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#222222" CornerRadius="10" Padding="12">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Selected slide" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding SelectedSlideSummary}" TextWrapping="Wrap" Opacity="0.8"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <StackPanel IsVisible="{Binding IsError}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="520">
+                    <TextBlock Text="Error" FontSize="18" FontWeight="SemiBold" Foreground="OrangeRed" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Opacity="0.8"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                        <Button Content="↻ Retry" Command="{Binding RetryCommand}"/>
+                        <Button Content="Open Presenter" Command="{Binding OpenPresenterBrowserCommand}" IsVisible="{Binding CanShowBrowserFallback}"/>
                     </StackPanel>
                 </StackPanel>
-
-                <!-- Error: process failed or exited unexpectedly -->
-                <StackPanel IsVisible="{Binding IsError}"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Spacing="12">
-                    <TextBlock Text="Error"
-                               FontSize="18"
-                               FontWeight="SemiBold"
-                               Foreground="OrangeRed"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="{Binding ErrorMessage}"
-                               TextWrapping="Wrap"
-                               MaxWidth="480"
-                               HorizontalAlignment="Center"
-                               Opacity="0.8"/>
-                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0,8,0,0">
-                        <Button Content="↻  Retry"
-                                Command="{Binding RetryCommand}"
-                                Padding="12,6"/>
-                        <Button Content="Open in Browser"
-                                Command="{Binding OpenExternalBrowserCommand}"
-                                Padding="12,6"/>
-                    </StackPanel>
-                </StackPanel>
-
             </Panel>
         </Border>
 
-        <!-- Bottom status bar -->
-        <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#202020" Padding="8,6">
+        <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#202020" Padding="8,6" IsVisible="{Binding ShowStatusBar}">
             <StackPanel Orientation="Horizontal" Spacing="16">
                 <TextBlock Text="{Binding HostState}" FontSize="12"/>
-                <TextBlock Text="|" Opacity="0.4" FontSize="12"/>
+                <TextBlock Text="{Binding CurrentSurfaceLabel}" FontSize="12"/>
+                <TextBlock Text="{Binding ElapsedPresentationTimeText, StringFormat='Elapsed: {0}'}" FontSize="12"/>
                 <TextBlock Text="{Binding Port, StringFormat='Port: {0}'}" FontSize="12"/>
-                <TextBlock Text="|" Opacity="0.4" FontSize="12"/>
-                <TextBlock Text="{Binding ParticipantUrl, StringFormat='Participant: {0}'}" FontSize="12"/>
-                <TextBlock Text="|" Opacity="0.4" FontSize="12"/>
-                <TextBlock Text="{Binding PresenterUrl, StringFormat='Presenter: {0}'}" FontSize="12"/>
+                <TextBlock Text="{Binding SlideCount, StringFormat='Slides: {0}'}" FontSize="12"/>
             </StackPanel>
         </Border>
-
     </Grid>
 </Window>
-

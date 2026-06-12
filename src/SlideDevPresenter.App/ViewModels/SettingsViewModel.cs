@@ -11,6 +11,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ISettingsService _settingsService;
 
     public ObservableCollection<SourceViewModel> Sources { get; } = [];
+    public IReadOnlyList<string> AvailableModes { get; } = [nameof(PresentationSurfaceMode.Presenter), nameof(PresentationSurfaceMode.Participant)];
 
     [ObservableProperty]
     private SourceViewModel? _selectedSource;
@@ -29,6 +30,9 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _openPresenterOnStart;
+
+    [ObservableProperty]
+    private string _defaultMode = nameof(PresentationSurfaceMode.Presenter);
 
     [ObservableProperty]
     private string _theme = "System";
@@ -62,6 +66,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         OpenParticipantOnSecondMonitor = settings.Defaults.OpenParticipantOnSecondMonitor;
         FullscreenParticipant = settings.Defaults.FullscreenParticipant;
         OpenPresenterOnStart = settings.Defaults.OpenPresenterOnStart;
+        DefaultMode = settings.Defaults.DefaultMode;
 
         Theme = settings.Appearance.Theme;
         ShowStatusBar = settings.Appearance.ShowStatusBar;
@@ -139,6 +144,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         settings.Defaults.OpenParticipantOnSecondMonitor = OpenParticipantOnSecondMonitor;
         settings.Defaults.FullscreenParticipant = FullscreenParticipant;
         settings.Defaults.OpenPresenterOnStart = OpenPresenterOnStart;
+        settings.Defaults.DefaultMode = DefaultMode;
         settings.Appearance.Theme = Theme;
         settings.Appearance.ShowStatusBar = ShowStatusBar;
         settings.Appearance.ShowRibbon = ShowRibbon;

@@ -10,12 +10,20 @@ namespace SlideDevPresenter.App.ViewModels;
 
 public sealed partial class MainViewModel : ObservableObject
 {
+    private static readonly Uri AboutBlankUri = new("about:blank");
+
     private readonly ISettingsService _settingsService;
     private readonly ISourceScanner _sourceScanner;
     private readonly ISlidevProcessHost _processHost;
+    private readonly ISlideDeckMetadataReader _slideDeckMetadataReader;
     private readonly SynchronizationContext? _syncContext;
+    private CancellationTokenSource? _timerCts;
+    private DateTimeOffset? _sessionStartedAt;
+    private int _metadataLoadVersion;
+    private bool _hasAutoOpenedForCurrentRun;
 
     public ObservableCollection<PresentationProjectViewModel> Projects { get; } = [];
+    public ObservableCollection<SlideDeckSlide> Slides { get; } = [];
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
@@ -33,9 +41,19 @@ public sealed partial class MainViewModel : ObservableObject
     private HostState _hostState = HostState.Idle;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CurrentSurfaceUrl))]
+    [NotifyPropertyChangedFor(nameof(CurrentSurfaceUriOrBlank))]
+    [NotifyPropertyChangedFor(nameof(CurrentSurfaceLabel))]
+    [NotifyPropertyChangedFor(nameof(CanShowEmbeddedSurface))]
+    [NotifyPropertyChangedFor(nameof(CanShowBrowserFallback))]
     private string? _participantUrl;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CurrentSurfaceUrl))]
+    [NotifyPropertyChangedFor(nameof(CurrentSurfaceUriOrBlank))]
+    [NotifyPropertyChangedFor(nameof(CurrentSurfaceLabel))]
+    [NotifyPropertyChangedFor(nameof(CanShowEmbeddedSurface))]
+    [NotifyPropertyChangedFor(nameof(CanShowBrowserFallback))]
     private string? _presenterUrl;
 
     [ObservableProperty]
@@ -47,21 +65,101 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _isRefreshing;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CurrentSurfaceUrl))]
+    [NotifyPropertyChangedFor(nameof(CurrentSurfaceUriOrBlank))]
+    [NotifyPropertyChangedFor(nameof(CurrentSurfaceLabel))]
+    [NotifyPropertyChangedFor(nameof(CanShowEmbeddedSurface))]
+    private PresentationSurfaceMode _selectedSurfaceMode;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsHomeRibbonSelected))]
+    [NotifyPropertyChangedFor(nameof(IsLibraryRibbonSelected))]
+    [NotifyPropertyChangedFor(nameof(IsViewRibbonSelected))]
+    private string _selectedRibbonTab = "Home";
+
+    [ObservableProperty]
+    private bool _showThumbnailsPanel = true;
+
+    [ObservableProperty]
+    private bool _showAgendaPanel = true;
+
+    [ObservableProperty]
+    private bool _showTimerPanel = true;
+
+    [ObservableProperty]
+    private string _deckTitle = "Presentation workspace";
+
+    [ObservableProperty]
+    private SlideDeckSlide? _selectedOutlineSlide;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ElapsedPresentationTimeText))]
+    private TimeSpan _elapsedPresentationTime;
+
     public bool IsIdle => HostState == HostState.Idle;
     public bool IsStarting => HostState == HostState.Starting;
     public bool IsRunning => HostState == HostState.Running;
     public bool IsError => HostState == HostState.Error;
 
+    public bool IsHomeRibbonSelected => SelectedRibbonTab == "Home";
+    public bool IsLibraryRibbonSelected => SelectedRibbonTab == "Library";
+    public bool IsViewRibbonSelected => SelectedRibbonTab == "View";
+
+    public string CurrentSurfaceLabel => SelectedSurfaceMode == PresentationSurfaceMode.Presenter ? "Presenter View" : "Participant View";
+    public string CurrentSurfaceUrl => SelectedSurfaceMode == PresentationSurfaceMode.Presenter
+        ? PresenterUrl ?? "Not available"
+        : ParticipantUrl ?? "Not available";
+    public Uri CurrentSurfaceUriOrBlank => Uri.TryCreate(CurrentSurfaceUrl, UriKind.Absolute, out var uri) ? uri : AboutBlankUri;
+    public bool CanShowEmbeddedSurface => IsRunning && _settingsService.Settings.WebView.PreferEmbeddedWebView && CurrentSurfaceUriOrBlank != AboutBlankUri;
+    public bool CanShowBrowserFallback => IsRunning && _settingsService.Settings.WebView.AllowExternalBrowserFallback;
+    public bool ShowRibbon => _settingsService.Settings.Appearance.ShowRibbon;
+    public bool ShowStatusBar => _settingsService.Settings.Appearance.ShowStatusBar;
+    public bool HasSlides => Slides.Count > 0;
+    public int SlideCount => Slides.Count;
+    public string ElapsedPresentationTimeText => ElapsedPresentationTime.ToString(@"hh\:mm\:ss");
+    public string SelectedSlideSummary => SelectedOutlineSlide?.Summary ?? "Select a slide to inspect its summary.";
+    public string EmbeddedSurfaceHint => _settingsService.Settings.WebView.PreferEmbeddedWebView
+        ? "Embedded preview is waiting for a reachable presenter surface."
+        : "Embedded preview is disabled in settings. Use the browser workflow instead.";
+
     public ISettingsService SettingsService => _settingsService;
 
     public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost)
+        : this(settingsService, sourceScanner, processHost, new NullSlideDeckMetadataReader())
+    {
+    }
+
+    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader)
     {
         _settingsService = settingsService;
         _sourceScanner = sourceScanner;
         _processHost = processHost;
+        _slideDeckMetadataReader = slideDeckMetadataReader;
         _syncContext = SynchronizationContext.Current;
+        _selectedSurfaceMode = ParseSurfaceMode(settingsService.Settings.Defaults.DefaultMode);
 
         _processHost.StateChanged += OnHostStateChanged;
+    }
+
+    public void RefreshPreferences()
+    {
+        SelectedSurfaceMode = ParseSurfaceMode(_settingsService.Settings.Defaults.DefaultMode);
+        OnPropertyChanged(nameof(ShowRibbon));
+        OnPropertyChanged(nameof(ShowStatusBar));
+        OnPropertyChanged(nameof(CanShowEmbeddedSurface));
+        OnPropertyChanged(nameof(CanShowBrowserFallback));
+        OnPropertyChanged(nameof(EmbeddedSurfaceHint));
+    }
+
+    partial void OnSelectedProjectChanged(PresentationProjectViewModel? value)
+    {
+        _ = LoadSelectedProjectMetadataAsync(value);
+    }
+
+    partial void OnSelectedOutlineSlideChanged(SlideDeckSlide? value)
+    {
+        OnPropertyChanged(nameof(SelectedSlideSummary));
     }
 
     private void OnHostStateChanged(object? sender, HostStateChangedEventArgs e)
@@ -73,6 +171,25 @@ public sealed partial class MainViewModel : ObservableObject
             PresenterUrl = _processHost.PresenterUrl;
             Port = _processHost.Port;
             ErrorMessage = e.ErrorMessage;
+            OnPropertyChanged(nameof(CurrentSurfaceUrl));
+            OnPropertyChanged(nameof(CurrentSurfaceUriOrBlank));
+            OnPropertyChanged(nameof(CanShowEmbeddedSurface));
+            OnPropertyChanged(nameof(CanShowBrowserFallback));
+
+            if (e.NewState == HostState.Running)
+            {
+                StartSessionTimer();
+                AutoOpenConfiguredViews();
+            }
+            else if (e.NewState == HostState.Idle)
+            {
+                _hasAutoOpenedForCurrentRun = false;
+                StopSessionTimer(resetElapsed: true);
+            }
+            else if (e.NewState == HostState.Error)
+            {
+                StopSessionTimer(resetElapsed: false);
+            }
         }
 
         if (_syncContext is null || SynchronizationContext.Current == _syncContext)
@@ -129,9 +246,14 @@ public sealed partial class MainViewModel : ObservableObject
                 }
             }
 
+            var previousSelectionId = SelectedProject?.Id;
             Projects.Clear();
-            foreach (var p in projects)
-                Projects.Add(p);
+            foreach (var project in projects.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
+                Projects.Add(project);
+
+            SelectedProject = previousSelectionId is not null
+                ? Projects.FirstOrDefault(project => project.Id == previousSelectionId)
+                : Projects.FirstOrDefault();
         }
         finally
         {
@@ -142,7 +264,12 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanLaunch))]
     public async Task LaunchAsync()
     {
-        if (SelectedProject is null) return;
+        if (SelectedProject is null)
+            return;
+
+        _hasAutoOpenedForCurrentRun = false;
+        RefreshPreferences();
+
         var port = _settingsService.Settings.Defaults.DefaultPort;
         await _processHost.StartAsync(SelectedProject.ToModel(), port);
     }
@@ -160,8 +287,11 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRetry))]
     public async Task RetryAsync()
     {
-        if (SelectedProject is null) return;
+        if (SelectedProject is null)
+            return;
+
         await _processHost.StopAsync();
+        _hasAutoOpenedForCurrentRun = false;
         var port = _settingsService.Settings.Defaults.DefaultPort;
         await _processHost.StartAsync(SelectedProject.ToModel(), port);
     }
@@ -169,11 +299,154 @@ public sealed partial class MainViewModel : ObservableObject
     private bool CanRetry() => SelectedProject is not null && HostState == HostState.Error;
 
     [RelayCommand]
-    public void OpenExternalBrowser()
+    public void OpenCurrentSurfaceInBrowser() => TryOpenBrowser(CurrentSurfaceUrl);
+
+    [RelayCommand]
+    public void OpenParticipantBrowser() => TryOpenBrowser(ParticipantUrl);
+
+    [RelayCommand]
+    public void OpenPresenterBrowser() => TryOpenBrowser(PresenterUrl);
+
+    [RelayCommand]
+    public void SelectHomeRibbon() => SelectedRibbonTab = "Home";
+
+    [RelayCommand]
+    public void SelectLibraryRibbon() => SelectedRibbonTab = "Library";
+
+    [RelayCommand]
+    public void SelectViewRibbon() => SelectedRibbonTab = "View";
+
+    [RelayCommand]
+    public void UsePresenterSurface() => SelectedSurfaceMode = PresentationSurfaceMode.Presenter;
+
+    [RelayCommand]
+    public void UseParticipantSurface() => SelectedSurfaceMode = PresentationSurfaceMode.Participant;
+
+    [RelayCommand]
+    public void ToggleThumbnailsPanel() => ShowThumbnailsPanel = !ShowThumbnailsPanel;
+
+    [RelayCommand]
+    public void ToggleAgendaPanel() => ShowAgendaPanel = !ShowAgendaPanel;
+
+    [RelayCommand]
+    public void ToggleTimerPanel() => ShowTimerPanel = !ShowTimerPanel;
+
+    private async Task LoadSelectedProjectMetadataAsync(PresentationProjectViewModel? projectViewModel)
     {
-        var url = ParticipantUrl;
-        if (string.IsNullOrEmpty(url)) return;
-        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
-        catch (Exception ex) { ErrorMessage = $"Could not open browser: {ex.Message}"; }
+        var loadVersion = Interlocked.Increment(ref _metadataLoadVersion);
+
+        if (projectViewModel is null)
+        {
+            ApplyDeckMetadata(loadVersion, SlideDeckMetadata.Empty("Presentation workspace"));
+            return;
+        }
+
+        var metadata = await _slideDeckMetadataReader.ReadAsync(projectViewModel.ToModel());
+        ApplyDeckMetadata(loadVersion, metadata);
+    }
+
+    private void ApplyDeckMetadata(int loadVersion, SlideDeckMetadata metadata)
+    {
+        void Update()
+        {
+            if (loadVersion != _metadataLoadVersion)
+                return;
+
+            DeckTitle = string.IsNullOrWhiteSpace(metadata.DeckTitle) ? "Presentation workspace" : metadata.DeckTitle;
+            Slides.Clear();
+            foreach (var slide in metadata.Slides)
+                Slides.Add(slide);
+
+            SelectedOutlineSlide = Slides.FirstOrDefault();
+            OnPropertyChanged(nameof(HasSlides));
+            OnPropertyChanged(nameof(SlideCount));
+        }
+
+        if (_syncContext is null || SynchronizationContext.Current == _syncContext)
+            Update();
+        else
+            _syncContext.Post(_ => Update(), null);
+    }
+
+    private void TryOpenBrowser(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return;
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Could not open browser: {ex.Message}";
+        }
+    }
+
+    private void AutoOpenConfiguredViews()
+    {
+        if (_hasAutoOpenedForCurrentRun || !_settingsService.Settings.WebView.AllowExternalBrowserFallback)
+            return;
+
+        _hasAutoOpenedForCurrentRun = true;
+
+        if (_settingsService.Settings.Defaults.OpenPresenterOnStart)
+            TryOpenBrowser(PresenterUrl);
+
+        if (_settingsService.Settings.Defaults.OpenParticipantOnSecondMonitor)
+            TryOpenBrowser(ParticipantUrl);
+    }
+
+    private void StartSessionTimer()
+    {
+        if (_sessionStartedAt is not null)
+            return;
+
+        _sessionStartedAt = DateTimeOffset.UtcNow;
+        ElapsedPresentationTime = TimeSpan.Zero;
+        _timerCts = new CancellationTokenSource();
+        _ = RunSessionTimerAsync(_timerCts.Token);
+    }
+
+    private async Task RunSessionTimerAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        while (!cancellationToken.IsCancellationRequested && await timer.WaitForNextTickAsync(cancellationToken))
+            UpdateElapsedTime();
+    }
+
+    private void UpdateElapsedTime()
+    {
+        if (_sessionStartedAt is null)
+            return;
+
+        var elapsed = DateTimeOffset.UtcNow - _sessionStartedAt.Value;
+        void Update() => ElapsedPresentationTime = elapsed;
+
+        if (_syncContext is null || SynchronizationContext.Current == _syncContext)
+            Update();
+        else
+            _syncContext.Post(_ => Update(), null);
+    }
+
+    private void StopSessionTimer(bool resetElapsed)
+    {
+        _timerCts?.Cancel();
+        _timerCts?.Dispose();
+        _timerCts = null;
+        _sessionStartedAt = null;
+        if (resetElapsed)
+            ElapsedPresentationTime = TimeSpan.Zero;
+    }
+
+    private static PresentationSurfaceMode ParseSurfaceMode(string? mode) =>
+        string.Equals(mode, nameof(PresentationSurfaceMode.Participant), StringComparison.OrdinalIgnoreCase)
+            ? PresentationSurfaceMode.Participant
+            : PresentationSurfaceMode.Presenter;
+
+    private sealed class NullSlideDeckMetadataReader : ISlideDeckMetadataReader
+    {
+        public Task<SlideDeckMetadata> ReadAsync(PresentationProject project, CancellationToken cancellationToken = default) =>
+            Task.FromResult(SlideDeckMetadata.Empty(project.Name));
     }
 }

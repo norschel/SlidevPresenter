@@ -23,8 +23,9 @@ public partial class App : Application
             var settingsService = new SettingsService(loggerFactory.CreateLogger<SettingsService>());
             var sourceScanner = new SourceScanner(loggerFactory.CreateLogger<SourceScanner>());
             var processHost = new SlidevProcessHost(loggerFactory.CreateLogger<SlidevProcessHost>());
+            var slideDeckMetadataReader = new SlideDeckMetadataReader(loggerFactory.CreateLogger<SlideDeckMetadataReader>());
 
-            var mainViewModel = new MainViewModel(settingsService, sourceScanner, processHost);
+            var mainViewModel = new MainViewModel(settingsService, sourceScanner, processHost, slideDeckMetadataReader);
             var mainWindow = new MainWindow(mainViewModel);
             desktop.MainWindow = mainWindow;
 

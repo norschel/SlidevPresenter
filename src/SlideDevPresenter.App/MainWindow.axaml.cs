@@ -22,13 +22,15 @@ public partial class MainWindow : Window
         InitializeComponent();
     }
 
-    private void Settings_Click(object? sender, RoutedEventArgs e)
+    private async void Settings_Click(object? sender, RoutedEventArgs e)
     {
         if (_viewModel is null)
             return;
 
         var vm = new SettingsViewModel(_viewModel.SettingsService);
         var win = new SettingsWindow(vm);
-        win.ShowDialog(this);
+        await win.ShowDialog(this);
+        _viewModel.RefreshPreferences();
+        await _viewModel.RefreshLibraryAsync();
     }
 }

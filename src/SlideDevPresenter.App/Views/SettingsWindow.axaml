@@ -14,11 +14,7 @@
         WindowStartupLocation="CenterOwner">
 
     <Grid RowDefinitions="*,Auto" Margin="12">
-
-        <!-- Content -->
         <TabControl Grid.Row="0">
-
-            <!-- Sources tab -->
             <TabItem Header="Sources">
                 <Grid ColumnDefinitions="260,*" Margin="8">
                     <Grid Grid.Column="0" RowDefinitions="*,Auto">
@@ -55,11 +51,12 @@
                 </Grid>
             </TabItem>
 
-            <!-- Defaults tab -->
             <TabItem Header="Defaults">
                 <StackPanel Spacing="10" Margin="12">
                     <TextBlock Text="Default Port"/>
                     <NumericUpDown Value="{Binding DefaultPort}" Minimum="1024" Maximum="65535" Increment="1"/>
+                    <TextBlock Text="Default surface mode"/>
+                    <ComboBox ItemsSource="{Binding AvailableModes}" SelectedItem="{Binding DefaultMode}" Width="180"/>
                     <CheckBox Content="Auto-increment port if occupied" IsChecked="{Binding AutoIncrementPorts}"/>
                     <CheckBox Content="Open participant on second monitor" IsChecked="{Binding OpenParticipantOnSecondMonitor}"/>
                     <CheckBox Content="Fullscreen participant window" IsChecked="{Binding FullscreenParticipant}"/>
@@ -67,11 +64,10 @@
                 </StackPanel>
             </TabItem>
 
-            <!-- Appearance tab -->
             <TabItem Header="Appearance">
                 <StackPanel Spacing="10" Margin="12">
                     <TextBlock Text="Theme"/>
-                    <ComboBox SelectedItem="{Binding Theme}" Width="180">
+                    <ComboBox Width="180">
                         <ComboBoxItem Content="System"/>
                         <ComboBoxItem Content="Light"/>
                         <ComboBoxItem Content="Dark"/>
@@ -81,17 +77,14 @@
                 </StackPanel>
             </TabItem>
 
-            <!-- WebView tab -->
             <TabItem Header="WebView">
                 <StackPanel Spacing="10" Margin="12">
                     <CheckBox Content="Prefer embedded WebView" IsChecked="{Binding PreferEmbeddedWebView}"/>
                     <CheckBox Content="Allow external browser fallback" IsChecked="{Binding AllowExternalBrowserFallback}"/>
                 </StackPanel>
             </TabItem>
-
         </TabControl>
 
-        <!-- Action buttons -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
             <Button Content="Save" Command="{Binding SaveCommand}"/>
             <Button Content="Close" Click="Close_Click"/>
