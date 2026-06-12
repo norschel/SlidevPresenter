@@ -20,6 +20,7 @@
                     <ToggleButton Content="Home" IsChecked="{Binding IsHomeRibbonSelected, Mode=OneWay}" Command="{Binding SelectHomeRibbonCommand}"/>
                     <ToggleButton Content="Library" IsChecked="{Binding IsLibraryRibbonSelected, Mode=OneWay}" Command="{Binding SelectLibraryRibbonCommand}"/>
                     <ToggleButton Content="View" IsChecked="{Binding IsViewRibbonSelected, Mode=OneWay}" Command="{Binding SelectViewRibbonCommand}"/>
+                    <ToggleButton Content="Presentation" IsChecked="{Binding IsPresentationRibbonSelected, Mode=OneWay}" Command="{Binding SelectPresentationRibbonCommand}"/>
                     <Button Content="Settings" Click="Settings_Click" ToolTip.Tip="Open application settings"/>
                 </StackPanel>
 
@@ -45,6 +46,14 @@
                             <Button Content="Thumbnails" Command="{Binding ToggleThumbnailsPanelCommand}"/>
                             <Button Content="Agenda" Command="{Binding ToggleAgendaPanelCommand}"/>
                             <Button Content="Timer" Command="{Binding ToggleTimerPanelCommand}"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsPresentationRibbonSelected}">
+                            <Button Content="▶ Start" Command="{Binding LaunchCommand}" ToolTip.Tip="Start presentation"/>
+                            <Button Content="■ Stop" Command="{Binding StopCommand}" ToolTip.Tip="Stop presentation"/>
+                            <Button Content="↻ Retry" Command="{Binding RetryCommand}" ToolTip.Tip="Retry presentation"/>
+                            <Button Content="Detect Displays" Command="{Binding DetectDisplaysCommand}" ToolTip.Tip="Detect connected displays"/>
+                            <TextBlock Text="{Binding DetectedDisplayCount, StringFormat='Displays: {0}'}" VerticalAlignment="Center" Margin="4,0,0,0" IsVisible="{Binding DetectedDisplayCount, Converter={x:Static ObjectConverters.IsNotNull}}"/>
                         </StackPanel>
                     </Panel>
                 </Border>

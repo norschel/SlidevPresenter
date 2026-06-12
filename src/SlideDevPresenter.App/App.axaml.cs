@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Microsoft.Extensions.Logging;
+using SlideDevPresenter.App.Services;
 using SlideDevPresenter.App.ViewModels;
 using SlideDevPresenter.Infrastructure.Services;
 
@@ -24,8 +25,10 @@ public partial class App : Application
             var sourceScanner = new SourceScanner(loggerFactory.CreateLogger<SourceScanner>());
             var processHost = new SlidevProcessHost(loggerFactory.CreateLogger<SlidevProcessHost>());
             var slideDeckMetadataReader = new SlideDeckMetadataReader(loggerFactory.CreateLogger<SlideDeckMetadataReader>());
+            var displayService = new AvaloniaDisplayService();
+            var presentationWindowService = new PresentationWindowService(displayService, settingsService);
 
-            var mainViewModel = new MainViewModel(settingsService, sourceScanner, processHost, slideDeckMetadataReader);
+            var mainViewModel = new MainViewModel(settingsService, sourceScanner, processHost, slideDeckMetadataReader, presentationWindowService);
             var mainWindow = new MainWindow(mainViewModel);
             desktop.MainWindow = mainWindow;
 

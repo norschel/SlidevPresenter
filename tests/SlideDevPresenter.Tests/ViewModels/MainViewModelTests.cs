@@ -78,14 +78,41 @@ internal sealed class FakeProcessHost : ISlidevProcessHost
     }
 }
 
+internal sealed class FakePresentationWindowService : IPresentationWindowService
+{
+    public int OpenCallCount { get; private set; }
+    public int CloseCallCount { get; private set; }
+    public string? LastParticipantUrl { get; private set; }
+    public string? LastPresenterUrl { get; private set; }
+
+    public event EventHandler? PresentationExited;
+
+    public Task OpenAsync(string participantUrl, string? presenterUrl, CancellationToken cancellationToken = default)
+    {
+        OpenCallCount++;
+        LastParticipantUrl = participantUrl;
+        LastPresenterUrl = presenterUrl;
+        return Task.CompletedTask;
+    }
+
+    public Task CloseAsync(CancellationToken cancellationToken = default)
+    {
+        CloseCallCount++;
+        return Task.CompletedTask;
+    }
+
+    public void SimulateEscPressed() => PresentationExited?.Invoke(this, EventArgs.Empty);
+}
+
 public class MainViewModelTests
 {
     private static MainViewModel CreateViewModel(
         FakeSettingsService? settings = null,
         FakeSourceScanner? scanner = null,
         FakeProcessHost? host = null,
-        FakeSlideDeckMetadataReader? reader = null) =>
-        new(settings ?? new(), scanner ?? new(), host ?? new(), reader ?? new());
+        FakeSlideDeckMetadataReader? reader = null,
+        FakePresentationWindowService? windowService = null) =>
+        new(settings ?? new(), scanner ?? new(), host ?? new(), reader ?? new(), windowService ?? new());
 
     private static PresentationProject MakeProject(string name = "Talk") => new()
     {
@@ -401,5 +428,105 @@ public class MainViewModelTests
         await vm.LaunchAsync();
 
         Assert.True(vm.StopCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task WhenHostRunning_AndAutoDetectEnabled_OpensPresentationWindowService()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.DisplayManagement.AutoDetectDisplays = true;
+
+        var host = new FakeProcessHost();
+        var windowService = new FakePresentationWindowService();
+        var vm = CreateViewModel(settings, host: host, windowService: windowService);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        Assert.Equal(1, windowService.OpenCallCount);
+        Assert.Equal("http://localhost:3030/", windowService.LastParticipantUrl);
+        Assert.Equal("http://localhost:3030/presenter/", windowService.LastPresenterUrl);
+    }
+
+    [Fact]
+    public async Task WhenHostRunning_AndAutoDetectDisabled_DoesNotOpenPresentationWindowService()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.DisplayManagement.AutoDetectDisplays = false;
+
+        var host = new FakeProcessHost();
+        var windowService = new FakePresentationWindowService();
+        var vm = CreateViewModel(settings, host: host, windowService: windowService);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        Assert.Equal(0, windowService.OpenCallCount);
+    }
+
+    [Fact]
+    public async Task WhenHostStops_ClosesPresentationWindowService()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.DisplayManagement.AutoDetectDisplays = true;
+
+        var host = new FakeProcessHost();
+        var windowService = new FakePresentationWindowService();
+        var vm = CreateViewModel(settings, host: host, windowService: windowService);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        await vm.StopAsync();
+
+        Assert.Equal(1, windowService.CloseCallCount);
+    }
+
+    [Fact]
+    public async Task WhenHostErrors_ClosesPresentationWindowService()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.DisplayManagement.AutoDetectDisplays = true;
+
+        var host = new FakeProcessHost();
+        var windowService = new FakePresentationWindowService();
+        var vm = CreateViewModel(settings, host: host, windowService: windowService);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        host.SimulateError("crash");
+
+        Assert.Equal(1, windowService.CloseCallCount);
+    }
+
+    [Fact]
+    public async Task WhenPresentationExitedFired_StopsPresentation()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.DisplayManagement.AutoDetectDisplays = true;
+
+        var host = new FakeProcessHost();
+        var windowService = new FakePresentationWindowService();
+        var vm = CreateViewModel(settings, host: host, windowService: windowService);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        windowService.SimulateEscPressed();
+
+        Assert.Equal(HostState.Idle, vm.HostState);
+        Assert.Equal(1, host.StopCallCount);
+    }
+
+    [Fact]
+    public void SelectPresentationRibbon_SetsIsPresentationRibbonSelected()
+    {
+        var vm = CreateViewModel();
+        vm.SelectPresentationRibbon();
+        Assert.True(vm.IsPresentationRibbonSelected);
+        Assert.False(vm.IsHomeRibbonSelected);
     }
 }

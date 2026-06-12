@@ -131,4 +131,48 @@ public class SettingsSerializationTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public async Task SaveAsync_ThenLoadAsync_RoundTripsDisplayManagementSettings()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var service = CreateService(path);
+            service.Settings.DisplayManagement.AutoDetectDisplays = false;
+            service.Settings.DisplayManagement.FullscreenParticipantView = false;
+            service.Settings.DisplayManagement.RestoreDisplayTopologyOnExit = true;
+            await service.SaveAsync();
+
+            var loaded = CreateService(path);
+            await loaded.LoadAsync();
+
+            Assert.False(loaded.Settings.DisplayManagement.AutoDetectDisplays);
+            Assert.False(loaded.Settings.DisplayManagement.FullscreenParticipantView);
+            Assert.True(loaded.Settings.DisplayManagement.RestoreDisplayTopologyOnExit);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task SavedJson_ContainsDisplayManagementSection()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var service = CreateService(path);
+            await service.SaveAsync();
+
+            var json = await File.ReadAllTextAsync(path);
+            Assert.Contains("\"displayManagement\"", json);
+            Assert.Contains("\"autoDetectDisplays\"", json);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

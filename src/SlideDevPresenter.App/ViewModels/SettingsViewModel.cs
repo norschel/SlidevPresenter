@@ -49,6 +49,15 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _allowExternalBrowserFallback;
 
+    [ObservableProperty]
+    private bool _autoDetectDisplays;
+
+    [ObservableProperty]
+    private bool _fullscreenParticipantView;
+
+    [ObservableProperty]
+    private bool _restoreDisplayTopologyOnExit;
+
     public SettingsViewModel(ISettingsService settingsService)
     {
         _settingsService = settingsService;
@@ -74,6 +83,10 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         PreferEmbeddedWebView = settings.WebView.PreferEmbeddedWebView;
         AllowExternalBrowserFallback = settings.WebView.AllowExternalBrowserFallback;
+
+        AutoDetectDisplays = settings.DisplayManagement.AutoDetectDisplays;
+        FullscreenParticipantView = settings.DisplayManagement.FullscreenParticipantView;
+        RestoreDisplayTopologyOnExit = settings.DisplayManagement.RestoreDisplayTopologyOnExit;
     }
 
     [RelayCommand]
@@ -150,6 +163,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         settings.Appearance.ShowRibbon = ShowRibbon;
         settings.WebView.PreferEmbeddedWebView = PreferEmbeddedWebView;
         settings.WebView.AllowExternalBrowserFallback = AllowExternalBrowserFallback;
+        settings.DisplayManagement.AutoDetectDisplays = AutoDetectDisplays;
+        settings.DisplayManagement.FullscreenParticipantView = FullscreenParticipantView;
+        settings.DisplayManagement.RestoreDisplayTopologyOnExit = RestoreDisplayTopologyOnExit;
 
         await _settingsService.SaveAsync();
     }

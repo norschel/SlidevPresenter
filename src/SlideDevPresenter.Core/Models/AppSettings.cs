@@ -6,6 +6,7 @@ public sealed class AppSettings
     public DefaultSettings Defaults { get; set; } = new();
     public AppearanceSettings Appearance { get; set; } = new();
     public WebViewSettings WebView { get; set; } = new();
+    public DisplayManagementSettings DisplayManagement { get; set; } = new();
 }
 
 public sealed class DefaultSettings
@@ -29,4 +30,11 @@ public sealed class WebViewSettings
 {
     public bool PreferEmbeddedWebView { get; set; } = true;
     public bool AllowExternalBrowserFallback { get; set; } = true;
+}
+
+public sealed class DisplayManagementSettings
+{
+    public bool AutoDetectDisplays { get; set; } = true;
+    public bool FullscreenParticipantView { get; set; } = true;
+    public bool RestoreDisplayTopologyOnExit { get; set; } = false;
 }

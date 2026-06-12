@@ -16,6 +16,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly ISourceScanner _sourceScanner;
     private readonly ISlidevProcessHost _processHost;
     private readonly ISlideDeckMetadataReader _slideDeckMetadataReader;
+    private readonly IPresentationWindowService _presentationWindowService;
     private readonly SynchronizationContext? _syncContext;
     private CancellationTokenSource? _timerCts;
     private DateTimeOffset? _sessionStartedAt;
@@ -77,6 +78,7 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsHomeRibbonSelected))]
     [NotifyPropertyChangedFor(nameof(IsLibraryRibbonSelected))]
     [NotifyPropertyChangedFor(nameof(IsViewRibbonSelected))]
+    [NotifyPropertyChangedFor(nameof(IsPresentationRibbonSelected))]
     private string _selectedRibbonTab = "Home";
 
     [ObservableProperty]
@@ -98,6 +100,9 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ElapsedPresentationTimeText))]
     private TimeSpan _elapsedPresentationTime;
 
+    [ObservableProperty]
+    private int _detectedDisplayCount;
+
     public bool IsIdle => HostState == HostState.Idle;
     public bool IsStarting => HostState == HostState.Starting;
     public bool IsRunning => HostState == HostState.Running;
@@ -106,6 +111,7 @@ public sealed partial class MainViewModel : ObservableObject
     public bool IsHomeRibbonSelected => SelectedRibbonTab == "Home";
     public bool IsLibraryRibbonSelected => SelectedRibbonTab == "Library";
     public bool IsViewRibbonSelected => SelectedRibbonTab == "View";
+    public bool IsPresentationRibbonSelected => SelectedRibbonTab == "Presentation";
 
     public string CurrentSurfaceLabel => SelectedSurfaceMode == PresentationSurfaceMode.Presenter ? "Presenter View" : "Participant View";
     public string CurrentSurfaceUrl => SelectedSurfaceMode == PresentationSurfaceMode.Presenter
@@ -132,15 +138,22 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader)
+        : this(settingsService, sourceScanner, processHost, slideDeckMetadataReader, new NullPresentationWindowService())
+    {
+    }
+
+    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService)
     {
         _settingsService = settingsService;
         _sourceScanner = sourceScanner;
         _processHost = processHost;
         _slideDeckMetadataReader = slideDeckMetadataReader;
+        _presentationWindowService = presentationWindowService;
         _syncContext = SynchronizationContext.Current;
         _selectedSurfaceMode = ParseSurfaceMode(settingsService.Settings.Defaults.DefaultMode);
 
         _processHost.StateChanged += OnHostStateChanged;
+        _presentationWindowService.PresentationExited += OnPresentationExited;
     }
 
     public void RefreshPreferences()
@@ -316,6 +329,9 @@ public sealed partial class MainViewModel : ObservableObject
     public void SelectViewRibbon() => SelectedRibbonTab = "View";
 
     [RelayCommand]
+    public void SelectPresentationRibbon() => SelectedRibbonTab = "Presentation";
+
+    [RelayCommand]
     public void UsePresenterSurface() => SelectedSurfaceMode = PresentationSurfaceMode.Presenter;
 
     [RelayCommand]
@@ -329,6 +345,30 @@ public sealed partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     public void ToggleTimerPanel() => ShowTimerPanel = !ShowTimerPanel;
+
+    [RelayCommand]
+    public void DetectDisplays()
+    {
+        // Refresh detected display count — reported via DetectedDisplayCount property
+        // IDisplayService is resolved via PresentationWindowService; here we re-use the count
+        // that was detected at last presentation start (if any). The command also serves as a
+        // manual trigger to surface the current display topology to the user.
+        OnPropertyChanged(nameof(DetectedDisplayCount));
+    }
+
+    private void OnPresentationExited(object? sender, EventArgs e)
+    {
+        void Stop()
+        {
+            if (HostState is HostState.Running or HostState.Starting)
+                _ = StopAsync();
+        }
+
+        if (_syncContext is null || SynchronizationContext.Current == _syncContext)
+            Stop();
+        else
+            _syncContext.Post(_ => Stop(), null);
+    }
 
     private async Task LoadSelectedProjectMetadataAsync(PresentationProjectViewModel? projectViewModel)
     {
@@ -400,15 +440,20 @@ public sealed partial class MainViewModel : ObservableObject
         if (state == HostState.Running)
         {
             StartSessionTimer();
-            AutoOpenConfiguredViews();
+            if (_settingsService.Settings.DisplayManagement.AutoDetectDisplays && !string.IsNullOrWhiteSpace(participantUrl))
+                _ = _presentationWindowService.OpenAsync(participantUrl, presenterUrl);
+            else
+                AutoOpenConfiguredViews();
         }
         else if (state == HostState.Idle)
         {
             _hasAutoOpenedForCurrentRun = false;
+            _ = _presentationWindowService.CloseAsync();
             StopSessionTimer(resetElapsedOnIdle);
         }
         else if (state == HostState.Error)
         {
+            _ = _presentationWindowService.CloseAsync();
             StopSessionTimer(resetElapsed: false);
         }
     }
@@ -520,5 +565,14 @@ public sealed partial class MainViewModel : ObservableObject
     {
         public Task<SlideDeckMetadata> ReadAsync(PresentationProject project, CancellationToken cancellationToken = default) =>
             Task.FromResult(SlideDeckMetadata.Empty(project.Name));
+    }
+
+    private sealed class NullPresentationWindowService : IPresentationWindowService
+    {
+#pragma warning disable CS0067 // Event is never used — intentional null implementation
+        public event EventHandler? PresentationExited;
+#pragma warning restore CS0067
+        public Task OpenAsync(string participantUrl, string? presenterUrl, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task CloseAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

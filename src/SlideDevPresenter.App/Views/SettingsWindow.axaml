@@ -83,6 +83,15 @@
                     <CheckBox Content="Allow external browser fallback" IsChecked="{Binding AllowExternalBrowserFallback}"/>
                 </StackPanel>
             </TabItem>
+
+            <TabItem Header="Display">
+                <StackPanel Spacing="10" Margin="12">
+                    <TextBlock Text="Display Management" FontWeight="SemiBold"/>
+                    <CheckBox Content="Auto-detect displays on presentation start" IsChecked="{Binding AutoDetectDisplays}"/>
+                    <CheckBox Content="Open participant view fullscreen" IsChecked="{Binding FullscreenParticipantView}"/>
+                    <CheckBox Content="Restore display topology on exit" IsChecked="{Binding RestoreDisplayTopologyOnExit}"/>
+                </StackPanel>
+            </TabItem>
         </TabControl>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
