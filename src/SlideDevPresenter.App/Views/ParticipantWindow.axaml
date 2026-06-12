@@ -1,0 +1,27 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SlideDevPresenter.App.Views.ParticipantWindow"
+        Title="Participant View — SlideDevPresenter"
+        Background="Black"
+        WindowDecorations="None"
+        CanResize="False"
+        ShowInTaskbar="false">
+
+    <Grid>
+        <NativeWebView x:Name="WebView"/>
+
+        <!-- ESC hint overlay shown briefly at startup -->
+        <Border x:Name="EscHint"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Margin="0,16,16,0"
+                Background="#80000000"
+                CornerRadius="6"
+                Padding="10,6">
+            <TextBlock Text="Press ESC to exit"
+                       Foreground="White"
+                       FontSize="13"
+                       Opacity="0.85"/>
+        </Border>
+    </Grid>
+</Window>
