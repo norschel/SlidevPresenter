@@ -130,6 +130,7 @@ public partial class ParticipantWindow : Window
             && oldState == WindowState.FullScreen
             && newState != WindowState.FullScreen)
         {
+            _isFullscreenRequested = false;
             RaisePresentationExited();
         }
     }
