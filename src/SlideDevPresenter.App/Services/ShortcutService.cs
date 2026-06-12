@@ -1,4 +1,6 @@
 using Avalonia.Input;
+using SlideDevPresenter.Core.Models;
+using SlideDevPresenter.Core.Services;
 
 namespace SlideDevPresenter.App.Services;
 
@@ -25,11 +27,61 @@ public sealed class RuntimePlatformInfo : IPlatformInfo
     public bool IsMacOS => OperatingSystem.IsMacOS();
 }
 
-public sealed class ShortcutService(IPlatformInfo platformInfo) : IShortcutService
+public sealed class ShortcutService : IShortcutService
 {
-    private readonly IPlatformInfo _platformInfo = platformInfo;
+    private readonly IPlatformInfo _platformInfo;
+    private readonly ISettingsService? _settingsService;
+
+    public ShortcutService(IPlatformInfo platformInfo, ISettingsService? settingsService = null)
+    {
+        _platformInfo = platformInfo;
+        _settingsService = settingsService;
+    }
 
     public KeyGesture GetGesture(PresentationShortcutAction action)
+    {
+        var custom = GetCustomGestureString(action);
+        if (custom is not null)
+        {
+            try { return KeyGesture.Parse(custom); }
+            catch { /* fall through to default */ }
+        }
+
+        return GetDefaultGesture(action);
+    }
+
+    public string GetDisplayText(PresentationShortcutAction action)
+    {
+        var custom = GetCustomGestureString(action);
+        if (custom is not null)
+        {
+            try
+            {
+                var g = KeyGesture.Parse(custom);
+                return g.ToString();
+            }
+            catch { /* fall through to default */ }
+        }
+
+        return GetDefaultDisplayText(action);
+    }
+
+    private string? GetCustomGestureString(PresentationShortcutAction action)
+    {
+        var shortcuts = _settingsService?.Settings.Shortcuts;
+        if (shortcuts is null)
+            return null;
+
+        return action switch
+        {
+            PresentationShortcutAction.StartFromBeginning => shortcuts.StartFromBeginning,
+            PresentationShortcutAction.StartFromCurrentSlide => shortcuts.StartFromCurrentSlide,
+            PresentationShortcutAction.StartPresenterView => shortcuts.StartPresenterView,
+            _ => null
+        };
+    }
+
+    private KeyGesture GetDefaultGesture(PresentationShortcutAction action)
     {
         if (_platformInfo.IsMacOS)
         {
@@ -51,7 +103,7 @@ public sealed class ShortcutService(IPlatformInfo platformInfo) : IShortcutServi
         };
     }
 
-    public string GetDisplayText(PresentationShortcutAction action)
+    private string GetDefaultDisplayText(PresentationShortcutAction action)
     {
         if (_platformInfo.IsMacOS)
         {

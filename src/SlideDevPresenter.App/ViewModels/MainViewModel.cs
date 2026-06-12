@@ -81,6 +81,8 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsLibraryRibbonSelected))]
     [NotifyPropertyChangedFor(nameof(IsViewRibbonSelected))]
     [NotifyPropertyChangedFor(nameof(IsPresentationRibbonSelected))]
+    [NotifyPropertyChangedFor(nameof(IsBrowserRibbonSelected))]
+    [NotifyPropertyChangedFor(nameof(IsNormalWorkspaceVisible))]
     private string _selectedRibbonTab = "Home";
 
     [ObservableProperty]
@@ -106,6 +108,13 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasDetectedDisplays))]
     private int _detectedDisplayCount;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BrowserWorkspaceUri))]
+    [NotifyPropertyChangedFor(nameof(HasBrowserTabs))]
+    private BrowserTabViewModel? _selectedBrowserTab;
+
+    public ObservableCollection<BrowserTabViewModel> BrowserTabs { get; } = [];
+
     public bool HasDetectedDisplays => DetectedDisplayCount > 0;
 
     public bool IsIdle => HostState == HostState.Idle;
@@ -117,6 +126,10 @@ public sealed partial class MainViewModel : ObservableObject
     public bool IsLibraryRibbonSelected => SelectedRibbonTab == "Library";
     public bool IsViewRibbonSelected => SelectedRibbonTab == "View";
     public bool IsPresentationRibbonSelected => SelectedRibbonTab == "Presentation";
+    public bool IsBrowserRibbonSelected => SelectedRibbonTab == "Browser";
+    public bool IsNormalWorkspaceVisible => SelectedRibbonTab != "Browser";
+    public bool HasBrowserTabs => BrowserTabs.Count > 0;
+    public Uri BrowserWorkspaceUri => SelectedBrowserTab?.Url ?? AboutBlankUri;
 
     public string CurrentSurfaceLabel => SelectedSurfaceMode == PresentationSurfaceMode.Presenter ? "Presenter View" : "Participant View";
     public string CurrentSurfaceUrl => SelectedSurfaceMode == PresentationSurfaceMode.Presenter
@@ -165,6 +178,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         _processHost.StateChanged += OnHostStateChanged;
         _presentationWindowService.PresentationExited += OnPresentationExited;
+        _presentationWindowService.ExternalLinkNavigated += OnExternalLinkNavigated;
     }
 
     public void RefreshPreferences()
@@ -363,6 +377,19 @@ public sealed partial class MainViewModel : ObservableObject
     public void SelectPresentationRibbon() => SelectedRibbonTab = "Presentation";
 
     [RelayCommand]
+    public void SelectBrowserRibbon() => SelectedRibbonTab = "Browser";
+
+    [RelayCommand]
+    public void CloseBrowserTab(BrowserTabViewModel tab)
+    {
+        BrowserTabs.Remove(tab);
+        if (SelectedBrowserTab == tab)
+            SelectedBrowserTab = BrowserTabs.LastOrDefault();
+        OnPropertyChanged(nameof(HasBrowserTabs));
+        OnPropertyChanged(nameof(BrowserWorkspaceUri));
+    }
+
+    [RelayCommand]
     public void UsePresenterSurface() => SelectedSurfaceMode = PresentationSurfaceMode.Presenter;
 
     [RelayCommand]
@@ -395,6 +422,38 @@ public sealed partial class MainViewModel : ObservableObject
             Stop();
         else
             _syncContext.Post(_ => Stop(), null);
+    }
+
+    private void OnExternalLinkNavigated(object? sender, Uri uri)
+    {
+        if (!_settingsService.Settings.Navigation.OpenExternalLinksInEmbeddedBrowser)
+            return;
+
+        void Open() => OpenInEmbeddedBrowser(uri);
+
+        if (_syncContext is null || SynchronizationContext.Current == _syncContext)
+            Open();
+        else
+            _syncContext.Post(_ => Open(), null);
+    }
+
+    /// <summary>Opens the given URL in the embedded browser workspace and switches to the Browser ribbon tab.</summary>
+    public void OpenInEmbeddedBrowser(Uri uri)
+    {
+        var existing = BrowserTabs.FirstOrDefault(t => t.Url == uri);
+        if (existing is not null)
+        {
+            SelectedBrowserTab = existing;
+        }
+        else
+        {
+            var tab = new BrowserTabViewModel(uri);
+            BrowserTabs.Add(tab);
+            SelectedBrowserTab = tab;
+            OnPropertyChanged(nameof(HasBrowserTabs));
+        }
+
+        SelectedRibbonTab = "Browser";
     }
 
     private async Task LoadSelectedProjectMetadataAsync(PresentationProjectViewModel? projectViewModel)
@@ -645,8 +704,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     private sealed class NullPresentationWindowService : IPresentationWindowService
     {
-#pragma warning disable CS0067 // Event is never used — intentional null implementation
+#pragma warning disable CS0067 // Events are never used — intentional null implementation
         public event EventHandler? PresentationExited;
+        public event EventHandler<Uri>? ExternalLinkNavigated;
 #pragma warning restore CS0067
         public Task OpenAsync(string participantUrl, string? presenterUrl, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task CloseAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;

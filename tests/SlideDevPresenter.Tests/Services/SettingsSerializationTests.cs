@@ -175,4 +175,91 @@ public class SettingsSerializationTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public async Task SaveAsync_ThenLoadAsync_RoundTripsShortcutsSettings()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var service = CreateService(path);
+            service.Settings.Shortcuts.StartFromBeginning = "Ctrl+F5";
+            service.Settings.Shortcuts.StartFromCurrentSlide = "Ctrl+Shift+F5";
+            service.Settings.Shortcuts.StartPresenterView = null;
+            await service.SaveAsync();
+
+            var loaded = CreateService(path);
+            await loaded.LoadAsync();
+
+            Assert.Equal("Ctrl+F5", loaded.Settings.Shortcuts.StartFromBeginning);
+            Assert.Equal("Ctrl+Shift+F5", loaded.Settings.Shortcuts.StartFromCurrentSlide);
+            Assert.Null(loaded.Settings.Shortcuts.StartPresenterView);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task SavedJson_ContainsShortcutsSection()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var service = CreateService(path);
+            service.Settings.Shortcuts.StartFromBeginning = "Ctrl+F5";
+            await service.SaveAsync();
+
+            var json = await File.ReadAllTextAsync(path);
+            Assert.Contains("\"shortcuts\"", json);
+            Assert.Contains("\"startFromBeginning\"", json);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task SaveAsync_ThenLoadAsync_RoundTripsNavigationSettings()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var service = CreateService(path);
+            service.Settings.Navigation.OpenExternalLinksInSystemBrowser = false;
+            service.Settings.Navigation.OpenExternalLinksInEmbeddedBrowser = true;
+            await service.SaveAsync();
+
+            var loaded = CreateService(path);
+            await loaded.LoadAsync();
+
+            Assert.False(loaded.Settings.Navigation.OpenExternalLinksInSystemBrowser);
+            Assert.True(loaded.Settings.Navigation.OpenExternalLinksInEmbeddedBrowser);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task SavedJson_ContainsNavigationSection()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var service = CreateService(path);
+            await service.SaveAsync();
+
+            var json = await File.ReadAllTextAsync(path);
+            Assert.Contains("\"navigation\"", json);
+            Assert.Contains("\"openExternalLinksInSystemBrowser\"", json);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

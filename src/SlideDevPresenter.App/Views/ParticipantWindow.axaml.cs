@@ -15,6 +15,9 @@ public partial class ParticipantWindow : Window
     /// <summary>Raised when the user requests to exit the presentation (e.g. via ESC).</summary>
     public event EventHandler? PresentationExited;
 
+    /// <summary>Raised when the user navigates to an external URL from within the presentation.</summary>
+    public event EventHandler<Uri>? ExternalLinkNavigated;
+
     /// <summary>Parameterless constructor for the Avalonia designer.</summary>
     public ParticipantWindow()
     {
@@ -55,9 +58,8 @@ public partial class ParticipantWindow : Window
 
     private void OnWindowPreviewKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Handled)
-            return;
-
+        // BUG-006: Always handle ESC to fully close the session, even if the WebView has already
+        // processed it (e.g. to exit an embedded fullscreen video).
         if (_escapeHandler.TryHandle(e.Key))
             e.Handled = true;
     }
@@ -77,6 +79,7 @@ public partial class ParticipantWindow : Window
             return;
 
         _browserLauncher.Open(e.Request);
+        ExternalLinkNavigated?.Invoke(this, e.Request);
         e.Cancel = true;
     }
 
@@ -88,6 +91,7 @@ public partial class ParticipantWindow : Window
         if (_navigationPolicy.ShouldOpenExternally(e.Request, WebView.Source))
         {
             _browserLauncher.Open(e.Request);
+            ExternalLinkNavigated?.Invoke(this, e.Request);
             e.Handled = true;
             return;
         }

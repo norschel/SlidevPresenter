@@ -21,6 +21,7 @@
                     <ToggleButton Content="Library" IsChecked="{Binding IsLibraryRibbonSelected, Mode=OneWay}" Command="{Binding SelectLibraryRibbonCommand}"/>
                     <ToggleButton Content="View" IsChecked="{Binding IsViewRibbonSelected, Mode=OneWay}" Command="{Binding SelectViewRibbonCommand}"/>
                     <ToggleButton Content="Presentation" IsChecked="{Binding IsPresentationRibbonSelected, Mode=OneWay}" Command="{Binding SelectPresentationRibbonCommand}"/>
+                    <ToggleButton Content="Browser" IsChecked="{Binding IsBrowserRibbonSelected, Mode=OneWay}" Command="{Binding SelectBrowserRibbonCommand}"/>
                     <Button Content="Settings" Click="Settings_Click" ToolTip.Tip="Open application settings"/>
                 </StackPanel>
 
@@ -57,6 +58,11 @@
                             <Button Content="Detect Displays" Command="{Binding DetectDisplaysCommand}" ToolTip.Tip="Detect connected displays"/>
                             <TextBlock Text="{Binding DetectedDisplayCount, StringFormat='Displays: {0}'}" VerticalAlignment="Center" Margin="4,0,0,0" IsVisible="{Binding HasDetectedDisplays}"/>
                         </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsBrowserRibbonSelected}">
+                            <TextBlock Text="Embedded Browser" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding BrowserTabs.Count, StringFormat='Tabs: {0}'}" VerticalAlignment="Center" Opacity="0.7"/>
+                        </StackPanel>
                     </Panel>
                 </Border>
             </Grid>
@@ -91,6 +97,8 @@
 
         <Border Grid.Row="1" Grid.Column="1" Background="#171717" Padding="20">
             <Panel>
+                <!-- Normal presentation workspace (all states except Browser tab) -->
+                <Panel IsVisible="{Binding IsNormalWorkspaceVisible}">
                 <StackPanel IsVisible="{Binding IsIdle}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16" MaxWidth="520">
                     <TextBlock Text="SlideDevPresenter" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                     <TextBlock Text="Select a presentation, launch Slidev, then switch between embedded presenter and participant workflows from the ribbon." Opacity="0.7" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
@@ -202,6 +210,50 @@
                         <Button Content="Open Presenter" Command="{Binding OpenPresenterBrowserCommand}" IsVisible="{Binding CanShowBrowserFallback}"/>
                     </StackPanel>
                 </StackPanel>
+                </Panel>
+
+                <!-- Browser workspace (visible when Browser ribbon tab is selected) -->
+                <Grid IsVisible="{Binding IsBrowserRibbonSelected}" RowDefinitions="Auto,*">
+                    <!-- Browser tab bar -->
+                    <Border Grid.Row="0" Background="#1A1A1A" Padding="4,4,4,0">
+                        <Panel>
+                            <StackPanel IsVisible="{Binding HasBrowserTabs, Converter={x:Static BoolConverters.Not}}"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center" Margin="4">
+                                <TextBlock Text="No browser tabs open. Click a hyperlink in a presentation to open it here." Opacity="0.5" FontSize="12"/>
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding BrowserTabs}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="2"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:BrowserTabViewModel">
+                                        <Border Background="#2D2D2D" CornerRadius="4,4,0,0" Padding="8,4">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="{Binding Title}" VerticalAlignment="Center" FontSize="12" MaxWidth="160" TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Panel>
+                    </Border>
+
+                    <!-- Browser WebView -->
+                    <Border Grid.Row="1" Background="#101010" CornerRadius="0,0,12,12">
+                        <Panel>
+                            <NativeWebView x:Name="BrowserWebView"
+                                           IsVisible="{Binding HasBrowserTabs}"
+                                           Source="{Binding BrowserWorkspaceUri}"/>
+                            <StackPanel IsVisible="{Binding HasBrowserTabs, Converter={x:Static BoolConverters.Not}}"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="420">
+                                <TextBlock Text="Embedded Browser" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                <TextBlock Text="Hyperlinks clicked during a presentation will open here. You can also disable this in Settings → Navigation." TextWrapping="Wrap" TextAlignment="Center" Opacity="0.7"/>
+                            </StackPanel>
+                        </Panel>
+                    </Border>
+                </Grid>
             </Panel>
         </Border>
 

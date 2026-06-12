@@ -12,6 +12,7 @@ public sealed class PresentationWindowService : IPresentationWindowService
     private ParticipantWindow? _participantWindow;
 
     public event EventHandler? PresentationExited;
+    public event EventHandler<Uri>? ExternalLinkNavigated;
 
     public PresentationWindowService(IDisplayService displayService, ISettingsService settingsService)
     {
@@ -40,6 +41,7 @@ public sealed class PresentationWindowService : IPresentationWindowService
 
         _participantWindow = new ParticipantWindow(participantUrl);
         _participantWindow.PresentationExited += OnParticipantWindowExited;
+        _participantWindow.ExternalLinkNavigated += OnParticipantWindowExternalLinkNavigated;
 
         // On multi-display setups move the participant window to the secondary display before showing
         if (displays.Count >= 2 && settings.AutoDetectDisplays)
@@ -61,6 +63,7 @@ public sealed class PresentationWindowService : IPresentationWindowService
             return;
 
         _participantWindow.PresentationExited -= OnParticipantWindowExited;
+        _participantWindow.ExternalLinkNavigated -= OnParticipantWindowExternalLinkNavigated;
         _participantWindow.Close();
         _participantWindow = null;
     }
@@ -69,5 +72,10 @@ public sealed class PresentationWindowService : IPresentationWindowService
     {
         CloseOnUiThread();
         PresentationExited?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnParticipantWindowExternalLinkNavigated(object? sender, Uri uri)
+    {
+        ExternalLinkNavigated?.Invoke(this, uri);
     }
 }

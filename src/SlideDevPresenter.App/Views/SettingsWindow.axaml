@@ -88,6 +88,40 @@
                     <CheckBox Content="Restore display topology on exit" IsChecked="{Binding RestoreDisplayTopologyOnExit}"/>
                 </StackPanel>
             </TabItem>
+
+            <TabItem Header="Keyboard Shortcuts">
+                <StackPanel Spacing="10" Margin="12">
+                    <TextBlock Text="Presentation Shortcuts" FontWeight="SemiBold"/>
+                    <TextBlock Text="Enter an Avalonia KeyGesture string (e.g. F5, Shift+F5, Ctrl+F5). Leave blank to use the OS default." Opacity="0.7" TextWrapping="Wrap"/>
+
+                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Start From Beginning" VerticalAlignment="Center"/>
+                        <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding StartFromBeginningShortcut}" PlaceholderText="OS default (e.g. F5)"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Start From Current Slide" VerticalAlignment="Center"/>
+                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding StartFromCurrentSlideShortcut}" PlaceholderText="OS default (e.g. Shift+F5)"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Start Presenter View" VerticalAlignment="Center"/>
+                        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding StartPresenterViewShortcut}" PlaceholderText="OS default (e.g. Alt+F5)"/>
+                    </Grid>
+
+                    <TextBlock Text="{Binding ShortcutConflictError}"
+                               Foreground="OrangeRed"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding ShortcutConflictError, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+
+                    <Button Content="Restore Defaults" Command="{Binding RestoreDefaultShortcutsCommand}"
+                            ToolTip.Tip="Reset all shortcuts to the OS-specific defaults"/>
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="Navigation">
+                <StackPanel Spacing="10" Margin="12">
+                    <TextBlock Text="External Link Behavior" FontWeight="SemiBold"/>
+                    <CheckBox Content="Open external links in system browser" IsChecked="{Binding OpenExternalLinksInSystemBrowser}"/>
+                    <CheckBox Content="Open external links in embedded browser workspace" IsChecked="{Binding OpenExternalLinksInEmbeddedBrowser}"/>
+                </StackPanel>
+            </TabItem>
         </TabControl>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SlideDevPresenter.App.Services;
@@ -61,6 +62,26 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _restoreDisplayTopologyOnExit;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShortcutConflictError))]
+    private string _startFromBeginningShortcut = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShortcutConflictError))]
+    private string _startFromCurrentSlideShortcut = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShortcutConflictError))]
+    private string _startPresenterViewShortcut = string.Empty;
+
+    [ObservableProperty]
+    private bool _openExternalLinksInSystemBrowser;
+
+    [ObservableProperty]
+    private bool _openExternalLinksInEmbeddedBrowser;
+
+    public string? ShortcutConflictError => ValidateShortcuts();
+
     public SettingsViewModel(ISettingsService settingsService)
         : this(settingsService, new ThemeService())
     {
@@ -96,6 +117,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         AutoDetectDisplays = settings.DisplayManagement.AutoDetectDisplays;
         FullscreenParticipantView = settings.DisplayManagement.FullscreenParticipantView;
         RestoreDisplayTopologyOnExit = settings.DisplayManagement.RestoreDisplayTopologyOnExit;
+
+        StartFromBeginningShortcut = settings.Shortcuts.StartFromBeginning ?? string.Empty;
+        StartFromCurrentSlideShortcut = settings.Shortcuts.StartFromCurrentSlide ?? string.Empty;
+        StartPresenterViewShortcut = settings.Shortcuts.StartPresenterView ?? string.Empty;
+
+        OpenExternalLinksInSystemBrowser = settings.Navigation.OpenExternalLinksInSystemBrowser;
+        OpenExternalLinksInEmbeddedBrowser = settings.Navigation.OpenExternalLinksInEmbeddedBrowser;
     }
 
     [RelayCommand]
@@ -157,6 +185,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void RestoreDefaultShortcuts()
+    {
+        StartFromBeginningShortcut = string.Empty;
+        StartFromCurrentSlideShortcut = string.Empty;
+        StartPresenterViewShortcut = string.Empty;
+    }
+
+    [RelayCommand]
     private async Task SaveAsync()
     {
         var settings = _settingsService.Settings;
@@ -176,7 +212,54 @@ public sealed partial class SettingsViewModel : ObservableObject
         settings.DisplayManagement.FullscreenParticipantView = FullscreenParticipantView;
         settings.DisplayManagement.RestoreDisplayTopologyOnExit = RestoreDisplayTopologyOnExit;
 
+        settings.Shortcuts.StartFromBeginning = NullIfEmpty(StartFromBeginningShortcut);
+        settings.Shortcuts.StartFromCurrentSlide = NullIfEmpty(StartFromCurrentSlideShortcut);
+        settings.Shortcuts.StartPresenterView = NullIfEmpty(StartPresenterViewShortcut);
+
+        settings.Navigation.OpenExternalLinksInSystemBrowser = OpenExternalLinksInSystemBrowser;
+        settings.Navigation.OpenExternalLinksInEmbeddedBrowser = OpenExternalLinksInEmbeddedBrowser;
+
         await _settingsService.SaveAsync();
         _themeService.ApplyTheme(Theme);
     }
+
+    private string? ValidateShortcuts()
+    {
+        var shortcuts = new[]
+        {
+            (Label: "Start From Beginning", Value: StartFromBeginningShortcut),
+            (Label: "Start From Current Slide", Value: StartFromCurrentSlideShortcut),
+            (Label: "Start Presenter View", Value: StartPresenterViewShortcut),
+        };
+
+        // Check for invalid key gestures
+        foreach (var (label, value) in shortcuts)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+
+            try { KeyGesture.Parse(value); }
+            catch { return $"\"{value}\" is not a valid key gesture for \"{label}\"."; }
+        }
+
+        // Check for duplicates among non-empty values
+        var nonEmpty = shortcuts
+            .Where(s => !string.IsNullOrWhiteSpace(s.Value))
+            .Select(s => (s.Label, Normalized: s.Value.Trim().ToUpperInvariant()))
+            .ToList();
+
+        var duplicates = nonEmpty
+            .GroupBy(s => s.Normalized)
+            .Where(g => g.Count() > 1)
+            .Select(g => string.Join(" and ", g.Select(s => $"\"{s.Label}\"")))
+            .FirstOrDefault();
+
+        if (duplicates is not null)
+            return $"Duplicate shortcut assigned to {duplicates}.";
+
+        return null;
+    }
+
+    private static string? NullIfEmpty(string value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

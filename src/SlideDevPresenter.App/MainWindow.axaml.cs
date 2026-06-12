@@ -24,6 +24,7 @@ public partial class MainWindow : Window
         _navigationPolicy = new WebViewNavigationPolicy();
         InitializeComponent();
         ConfigureEmbeddedWebView();
+        ConfigureBrowserWebView();
         ConfigureShortcutBindings();
         ConfigureShortcutTooltips();
     }
@@ -43,6 +44,7 @@ public partial class MainWindow : Window
         DataContext = viewModel;
         InitializeComponent();
         ConfigureEmbeddedWebView();
+        ConfigureBrowserWebView();
         ConfigureShortcutBindings();
         ConfigureShortcutTooltips();
     }
@@ -56,6 +58,7 @@ public partial class MainWindow : Window
         var win = new SettingsWindow(vm);
         await win.ShowDialog(this);
         _viewModel.RefreshPreferences();
+        ReconfigureShortcuts();
         await _viewModel.RefreshLibraryAsync();
     }
 
@@ -63,6 +66,12 @@ public partial class MainWindow : Window
     {
         EmbeddedWebView.NavigationStarted += OnEmbeddedWebViewNavigationStarted;
         EmbeddedWebView.NewWindowRequested += OnEmbeddedWebViewNewWindowRequested;
+    }
+
+    private void ConfigureBrowserWebView()
+    {
+        BrowserWebView.NavigationStarted += OnBrowserWebViewNavigationStarted;
+        BrowserWebView.NewWindowRequested += OnBrowserWebViewNewWindowRequested;
     }
 
     private void OnEmbeddedWebViewNavigationStarted(object? sender, WebViewNavigationStartingEventArgs e)
@@ -73,7 +82,7 @@ public partial class MainWindow : Window
         if (!_navigationPolicy.ShouldOpenExternally(e.Request, EmbeddedWebView.Source))
             return;
 
-        _browserLauncher.Open(e.Request);
+        OpenExternalUrl(e.Request);
         e.Cancel = true;
     }
 
@@ -84,7 +93,7 @@ public partial class MainWindow : Window
 
         if (_navigationPolicy.ShouldOpenExternally(e.Request, EmbeddedWebView.Source))
         {
-            _browserLauncher.Open(e.Request);
+            OpenExternalUrl(e.Request);
             e.Handled = true;
             return;
         }
@@ -93,11 +102,61 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void OnBrowserWebViewNavigationStarted(object? sender, WebViewNavigationStartingEventArgs e)
+    {
+        if (e.Request is null || _viewModel is null)
+            return;
+
+        // Allow navigation within the browser workspace; update the selected tab's URL
+        if (_navigationPolicy.ShouldOpenExternally(e.Request, BrowserWebView.Source))
+        {
+            OpenExternalUrl(e.Request);
+            e.Cancel = true;
+            return;
+        }
+
+        // Keep the selected tab's URL in sync when navigating within the browser workspace
+        if (_viewModel.SelectedBrowserTab is { } tab && tab.Url != e.Request)
+        {
+            tab.Url = e.Request;
+            tab.Title = e.Request.Host.Length > 0 ? e.Request.Host : e.Request.ToString();
+        }
+    }
+
+    private void OnBrowserWebViewNewWindowRequested(object? sender, WebViewNewWindowRequestedEventArgs e)
+    {
+        if (e.Request is null)
+            return;
+
+        if (_navigationPolicy.ShouldOpenExternally(e.Request, BrowserWebView.Source))
+        {
+            OpenExternalUrl(e.Request);
+            e.Handled = true;
+            return;
+        }
+
+        // Open as a new browser tab
+        _viewModel?.OpenInEmbeddedBrowser(e.Request);
+        e.Handled = true;
+    }
+
+    private void OpenExternalUrl(Uri uri)
+    {
+        var settings = _viewModel?.SettingsService.Settings.Navigation;
+
+        if (settings is null || settings.OpenExternalLinksInSystemBrowser)
+            _browserLauncher.Open(uri);
+
+        if (settings is null || settings.OpenExternalLinksInEmbeddedBrowser)
+            _viewModel?.OpenInEmbeddedBrowser(uri);
+    }
+
     private void ConfigureShortcutBindings()
     {
         if (_viewModel is null)
             return;
 
+        KeyBindings.Clear();
         KeyBindings.Add(new KeyBinding
         {
             Gesture = _shortcutService.GetGesture(PresentationShortcutAction.StartFromBeginning),
@@ -120,5 +179,12 @@ public partial class MainWindow : Window
         ToolTip.SetTip(StartFromBeginningButton, $"Start presentation ({_shortcutService.GetDisplayText(PresentationShortcutAction.StartFromBeginning)})");
         ToolTip.SetTip(StartFromCurrentButton, $"Start from selected slide ({_shortcutService.GetDisplayText(PresentationShortcutAction.StartFromCurrentSlide)})");
         ToolTip.SetTip(StartPresenterViewButton, $"Launch presenter view ({_shortcutService.GetDisplayText(PresentationShortcutAction.StartPresenterView)})");
+    }
+
+    /// <summary>Rebuilds keyboard shortcut bindings and tooltips from the current settings.</summary>
+    public void ReconfigureShortcuts()
+    {
+        ConfigureShortcutBindings();
+        ConfigureShortcutTooltips();
     }
 }

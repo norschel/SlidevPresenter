@@ -85,7 +85,10 @@ internal sealed class FakePresentationWindowService : IPresentationWindowService
     public string? LastParticipantUrl { get; private set; }
     public string? LastPresenterUrl { get; private set; }
 
+#pragma warning disable CS0067
     public event EventHandler? PresentationExited;
+    public event EventHandler<Uri>? ExternalLinkNavigated;
+#pragma warning restore CS0067
 
     public Task OpenAsync(string participantUrl, string? presenterUrl, CancellationToken cancellationToken = default)
     {
@@ -102,6 +105,7 @@ internal sealed class FakePresentationWindowService : IPresentationWindowService
     }
 
     public void SimulateEscPressed() => PresentationExited?.Invoke(this, EventArgs.Empty);
+    public void SimulateExternalLinkNavigated(Uri uri) => ExternalLinkNavigated?.Invoke(this, uri);
 }
 
 internal sealed class FakeDisplayService : IDisplayService
@@ -614,4 +618,136 @@ public class MainViewModelTests
         Assert.Equal(0, vm.DetectedDisplayCount);
         Assert.False(vm.HasDetectedDisplays);
     }
+
+    // BUG-007: Embedded browser workspace tests
+
+    [Fact]
+    public void OpenInEmbeddedBrowser_AddsTab_AndSwitchesToBrowserRibbon()
+    {
+        var vm = CreateViewModel();
+        var uri = new Uri("https://github.com");
+
+        vm.OpenInEmbeddedBrowser(uri);
+
+        Assert.Single(vm.BrowserTabs);
+        Assert.Equal(uri, vm.BrowserTabs[0].Url);
+        Assert.Equal("Browser", vm.SelectedRibbonTab);
+        Assert.True(vm.IsBrowserRibbonSelected);
+        Assert.False(vm.IsNormalWorkspaceVisible);
+    }
+
+    [Fact]
+    public void OpenInEmbeddedBrowser_SameUrl_DoesNotAddDuplicateTab()
+    {
+        var vm = CreateViewModel();
+        var uri = new Uri("https://github.com");
+
+        vm.OpenInEmbeddedBrowser(uri);
+        vm.OpenInEmbeddedBrowser(uri);
+
+        Assert.Single(vm.BrowserTabs);
+    }
+
+    [Fact]
+    public void OpenInEmbeddedBrowser_DifferentUrls_AddsMultipleTabs()
+    {
+        var vm = CreateViewModel();
+
+        vm.OpenInEmbeddedBrowser(new Uri("https://github.com"));
+        vm.OpenInEmbeddedBrowser(new Uri("https://docs.microsoft.com"));
+
+        Assert.Equal(2, vm.BrowserTabs.Count);
+    }
+
+    [Fact]
+    public void CloseBrowserTab_RemovesTab_AndSelectsLast()
+    {
+        var vm = CreateViewModel();
+        vm.OpenInEmbeddedBrowser(new Uri("https://github.com"));
+        vm.OpenInEmbeddedBrowser(new Uri("https://docs.microsoft.com"));
+        var firstTab = vm.BrowserTabs[0];
+        var secondTab = vm.BrowserTabs[1];
+
+        vm.CloseBrowserTab(firstTab);
+
+        Assert.Single(vm.BrowserTabs);
+        Assert.Equal(secondTab, vm.BrowserTabs[0]);
+    }
+
+    [Fact]
+    public void CloseBrowserTab_WhenLastTab_SelectedBrowserTabBecomesNull()
+    {
+        var vm = CreateViewModel();
+        vm.OpenInEmbeddedBrowser(new Uri("https://github.com"));
+        var tab = vm.BrowserTabs[0];
+
+        vm.CloseBrowserTab(tab);
+
+        Assert.Empty(vm.BrowserTabs);
+        Assert.Null(vm.SelectedBrowserTab);
+        Assert.False(vm.HasBrowserTabs);
+    }
+
+    [Fact]
+    public void BrowserWorkspaceUri_WhenNoTabsSelected_ReturnsAboutBlank()
+    {
+        var vm = CreateViewModel();
+
+        Assert.Equal(new Uri("about:blank"), vm.BrowserWorkspaceUri);
+    }
+
+    [Fact]
+    public void BrowserWorkspaceUri_WhenTabSelected_ReturnsTabUrl()
+    {
+        var vm = CreateViewModel();
+        var uri = new Uri("https://github.com");
+        vm.OpenInEmbeddedBrowser(uri);
+
+        Assert.Equal(uri, vm.BrowserWorkspaceUri);
+    }
+
+    [Fact]
+    public void SelectBrowserRibbon_SetsBrowserRibbonSelected()
+    {
+        var vm = CreateViewModel();
+
+        vm.SelectBrowserRibbon();
+
+        Assert.True(vm.IsBrowserRibbonSelected);
+        Assert.False(vm.IsNormalWorkspaceVisible);
+        Assert.False(vm.IsHomeRibbonSelected);
+    }
+
+    [Fact]
+    public void IsNormalWorkspaceVisible_WhenBrowserTabSelected_ReturnsFalse()
+    {
+        var vm = CreateViewModel();
+        vm.SelectBrowserRibbon();
+
+        Assert.False(vm.IsNormalWorkspaceVisible);
+    }
+
+    [Fact]
+    public void IsNormalWorkspaceVisible_WhenNonBrowserTabSelected_ReturnsTrue()
+    {
+        var vm = CreateViewModel();
+        vm.SelectHomeRibbon();
+
+        Assert.True(vm.IsNormalWorkspaceVisible);
+    }
+
+    [Fact]
+    public void OpenInEmbeddedBrowser_WhenEmbeddedBrowserDisabled_DoesNotOpenTab()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.Navigation.OpenExternalLinksInEmbeddedBrowser = false;
+        var windowService = new FakePresentationWindowService();
+        var vm = CreateViewModel(settings: settings, windowService: windowService);
+
+        // Simulate the external link navigated event from the presentation window service
+        windowService.SimulateExternalLinkNavigated(new Uri("https://github.com"));
+
+        Assert.Empty(vm.BrowserTabs);
+    }
 }
+

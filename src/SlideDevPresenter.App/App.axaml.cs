@@ -28,7 +28,7 @@ public partial class App : Application
             var displayService = new AvaloniaDisplayService();
             var presentationWindowService = new PresentationWindowService(displayService, settingsService);
             var themeService = new ThemeService();
-            var shortcutService = new ShortcutService(new RuntimePlatformInfo());
+            var shortcutService = new ShortcutService(new RuntimePlatformInfo(), settingsService);
 
             var mainViewModel = new MainViewModel(settingsService, sourceScanner, processHost, slideDeckMetadataReader, presentationWindowService, displayService);
             var mainWindow = new MainWindow(mainViewModel, shortcutService, themeService);
