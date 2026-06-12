@@ -70,6 +70,9 @@ public partial class ParticipantWindow : Window
 
     private void OnWebViewNavigationStarted(object? sender, WebViewNavigationStartingEventArgs e)
     {
+        if (e.Request is null)
+            return;
+
         if (!_navigationPolicy.ShouldOpenExternally(e.Request, WebView.Source))
             return;
 
@@ -79,6 +82,9 @@ public partial class ParticipantWindow : Window
 
     private void OnWebViewNewWindowRequested(object? sender, WebViewNewWindowRequestedEventArgs e)
     {
+        if (e.Request is null)
+            return;
+
         if (_navigationPolicy.ShouldOpenExternally(e.Request, WebView.Source))
         {
             _browserLauncher.Open(e.Request);

@@ -67,6 +67,9 @@ public partial class MainWindow : Window
 
     private void OnEmbeddedWebViewNavigationStarted(object? sender, WebViewNavigationStartingEventArgs e)
     {
+        if (e.Request is null)
+            return;
+
         if (!_navigationPolicy.ShouldOpenExternally(e.Request, EmbeddedWebView.Source))
             return;
 
@@ -76,6 +79,9 @@ public partial class MainWindow : Window
 
     private void OnEmbeddedWebViewNewWindowRequested(object? sender, WebViewNewWindowRequestedEventArgs e)
     {
+        if (e.Request is null)
+            return;
+
         if (_navigationPolicy.ShouldOpenExternally(e.Request, EmbeddedWebView.Source))
         {
             _browserLauncher.Open(e.Request);
