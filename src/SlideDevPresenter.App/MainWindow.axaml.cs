@@ -28,6 +28,7 @@ public partial class MainWindow : Window
         ConfigureBrowserWebView();
         ConfigureShortcutBindings();
         ConfigureShortcutTooltips();
+        AttachEscapeHandler();
     }
 
     public MainWindow(
@@ -48,6 +49,7 @@ public partial class MainWindow : Window
         ConfigureBrowserWebView();
         ConfigureShortcutBindings();
         ConfigureShortcutTooltips();
+        AttachEscapeHandler();
     }
 
     private async void Settings_Click(object? sender, RoutedEventArgs e)
@@ -67,12 +69,14 @@ public partial class MainWindow : Window
     {
         EmbeddedWebView.NavigationStarted += OnEmbeddedWebViewNavigationStarted;
         EmbeddedWebView.NewWindowRequested += OnEmbeddedWebViewNewWindowRequested;
+        EmbeddedWebView.KeyDown += OnWebViewKeyDown;
     }
 
     private void ConfigureBrowserWebView()
     {
         BrowserWebView.NavigationStarted += OnBrowserWebViewNavigationStarted;
         BrowserWebView.NewWindowRequested += OnBrowserWebViewNewWindowRequested;
+        BrowserWebView.KeyDown += OnWebViewKeyDown;
     }
 
     private void OnEmbeddedWebViewNavigationStarted(object? sender, WebViewNavigationStartingEventArgs e)
@@ -195,16 +199,41 @@ public partial class MainWindow : Window
         ConfigureShortcutTooltips();
     }
 
+    private void AttachEscapeHandler()
+    {
+        // BUG-006 (main window): Intercept ESC in the tunnel phase so it fires even when a
+        // NativeWebView has native OS focus and the bubble-phase OnKeyDown override is bypassed.
+        AddHandler(InputElement.KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
+    }
+
+    private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
+    {
+        TryHandleEscape(e);
+    }
+
+    private void OnWebViewKeyDown(object? sender, KeyEventArgs e)
+    {
+        // Fallback: catch ESC forwarded by NativeWebView managed KeyDown event.
+        TryHandleEscape(e);
+    }
+
+    private void TryHandleEscape(KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && _viewModel?.StopCommand.CanExecute(null) == true)
+        {
+            _viewModel.StopCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         // Stop the active presentation when ESC is pressed in the main window.
         // This covers the common case where the user has focus on the main window
         // while the participant window is visible on the same or a different display.
-        if (!e.Handled && e.Key == Key.Escape && _viewModel?.StopCommand.CanExecute(null) == true)
-        {
-            _viewModel.StopCommand.Execute(null);
-            e.Handled = true;
-        }
+        // Note: the tunnel handler (AttachEscapeHandler) is the primary path; this
+        // override is kept as an additional fallback for the bubble phase.
+        TryHandleEscape(e);
         base.OnKeyDown(e);
     }
 }
