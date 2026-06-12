@@ -449,7 +449,10 @@ public class MainViewModelTests
 
         var host = new FakeProcessHost();
         var windowService = new FakePresentationWindowService();
-        var vm = CreateViewModel(settings, host: host, windowService: windowService);
+        var displayService = new FakeDisplayService();
+        displayService.Displays.Add(new DisplayInfo(0, true, 0, 0, 1920, 1080));
+        displayService.Displays.Add(new DisplayInfo(1, false, 1920, 0, 1920, 1080));
+        var vm = CreateViewModel(settings, host: host, windowService: windowService, displayService: displayService);
         vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
         await vm.LaunchAsync();
 
@@ -468,7 +471,29 @@ public class MainViewModelTests
 
         var host = new FakeProcessHost();
         var windowService = new FakePresentationWindowService();
-        var vm = CreateViewModel(settings, host: host, windowService: windowService);
+        var displayService = new FakeDisplayService();
+        displayService.Displays.Add(new DisplayInfo(0, true, 0, 0, 1920, 1080));
+        displayService.Displays.Add(new DisplayInfo(1, false, 1920, 0, 1920, 1080));
+        var vm = CreateViewModel(settings, host: host, windowService: windowService, displayService: displayService);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        Assert.Equal(0, windowService.OpenCallCount);
+    }
+
+    [Fact]
+    public async Task WhenHostRunning_WithSingleDisplay_DoesNotOpenPresentationWindowService()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.DisplayManagement.AutoDetectDisplays = true;
+
+        var host = new FakeProcessHost();
+        var windowService = new FakePresentationWindowService();
+        var displayService = new FakeDisplayService();
+        displayService.Displays.Add(new DisplayInfo(0, true, 0, 0, 1920, 1080));
+        var vm = CreateViewModel(settings, host: host, windowService: windowService, displayService: displayService);
         vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
         await vm.LaunchAsync();
 
@@ -485,7 +510,10 @@ public class MainViewModelTests
 
         var host = new FakeProcessHost();
         var windowService = new FakePresentationWindowService();
-        var vm = CreateViewModel(settings, host: host, windowService: windowService);
+        var displayService = new FakeDisplayService();
+        displayService.Displays.Add(new DisplayInfo(0, true, 0, 0, 1920, 1080));
+        displayService.Displays.Add(new DisplayInfo(1, false, 1920, 0, 1920, 1080));
+        var vm = CreateViewModel(settings, host: host, windowService: windowService, displayService: displayService);
         vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
         await vm.LaunchAsync();
         host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
@@ -503,7 +531,10 @@ public class MainViewModelTests
 
         var host = new FakeProcessHost();
         var windowService = new FakePresentationWindowService();
-        var vm = CreateViewModel(settings, host: host, windowService: windowService);
+        var displayService = new FakeDisplayService();
+        displayService.Displays.Add(new DisplayInfo(0, true, 0, 0, 1920, 1080));
+        displayService.Displays.Add(new DisplayInfo(1, false, 1920, 0, 1920, 1080));
+        var vm = CreateViewModel(settings, host: host, windowService: windowService, displayService: displayService);
         vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
         await vm.LaunchAsync();
         host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
@@ -521,7 +552,10 @@ public class MainViewModelTests
 
         var host = new FakeProcessHost();
         var windowService = new FakePresentationWindowService();
-        var vm = CreateViewModel(settings, host: host, windowService: windowService);
+        var displayService = new FakeDisplayService();
+        displayService.Displays.Add(new DisplayInfo(0, true, 0, 0, 1920, 1080));
+        displayService.Displays.Add(new DisplayInfo(1, false, 1920, 0, 1920, 1080));
+        var vm = CreateViewModel(settings, host: host, windowService: windowService, displayService: displayService);
         vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
         await vm.LaunchAsync();
         host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
@@ -750,4 +784,3 @@ public class MainViewModelTests
         Assert.Empty(vm.BrowserTabs);
     }
 }
-

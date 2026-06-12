@@ -533,8 +533,8 @@ public sealed partial class MainViewModel : ObservableObject
         if (state == HostState.Running)
         {
             StartSessionTimer();
-            if (_settingsService.Settings.DisplayManagement.AutoDetectDisplays && !string.IsNullOrWhiteSpace(participantUrl))
-                _ = _presentationWindowService.OpenAsync(participantUrl, presenterUrl);
+            if (ShouldOpenParticipantWindow(participantUrl))
+                _ = _presentationWindowService.OpenAsync(participantUrl!, presenterUrl);
             else
                 AutoOpenConfiguredViews();
         }
@@ -674,9 +674,14 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CanShowBrowserFallback));
 
         var participantUrl = ParticipantUrl;
-        if (_settingsService.Settings.DisplayManagement.AutoDetectDisplays && !string.IsNullOrWhiteSpace(participantUrl))
-            _ = _presentationWindowService.OpenAsync(participantUrl, PresenterUrl);
+        if (ShouldOpenParticipantWindow(participantUrl))
+            _ = _presentationWindowService.OpenAsync(participantUrl!, PresenterUrl);
     }
+
+    private bool ShouldOpenParticipantWindow(string? participantUrl) =>
+        _settingsService.Settings.DisplayManagement.AutoDetectDisplays &&
+        !string.IsNullOrWhiteSpace(participantUrl) &&
+        _displayService.GetDisplays().Count >= 2;
 
     private static string? BuildSlideNavigationUrl(string? url, int slideNumber)
     {
