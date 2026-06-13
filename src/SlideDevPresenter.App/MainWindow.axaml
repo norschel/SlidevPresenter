@@ -246,7 +246,7 @@
                     <Border Grid.Row="1" Background="#101010" CornerRadius="0,0,12,12">
                         <Panel>
                             <NativeWebView x:Name="BrowserWebView"
-                                           IsVisible="{Binding HasBrowserTabs}"
+                                           IsVisible="{Binding IsBrowserSurfaceVisible}"
                                            Source="{Binding BrowserWorkspaceUri}"/>
                             <StackPanel IsVisible="{Binding HasBrowserTabs, Converter={x:Static BoolConverters.Not}}"
                                         HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="420">

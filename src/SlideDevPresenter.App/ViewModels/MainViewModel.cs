@@ -91,6 +91,8 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsPresentationRibbonSelected))]
     [NotifyPropertyChangedFor(nameof(IsBrowserRibbonSelected))]
     [NotifyPropertyChangedFor(nameof(IsNormalWorkspaceVisible))]
+    [NotifyPropertyChangedFor(nameof(IsBrowserSurfaceVisible))]
+    [NotifyPropertyChangedFor(nameof(CanShowEmbeddedSurface))]
     private string _selectedRibbonTab = "Home";
 
     [ObservableProperty]
@@ -119,6 +121,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(BrowserWorkspaceUri))]
     [NotifyPropertyChangedFor(nameof(HasBrowserTabs))]
+    [NotifyPropertyChangedFor(nameof(IsBrowserSurfaceVisible))]
     private BrowserTabViewModel? _selectedBrowserTab;
 
     public ObservableCollection<BrowserTabViewModel> BrowserTabs { get; } = [];
@@ -137,6 +140,13 @@ public sealed partial class MainViewModel : ObservableObject
     public bool IsBrowserRibbonSelected => SelectedRibbonTab == "Browser";
     public bool IsNormalWorkspaceVisible => SelectedRibbonTab != "Browser";
     public bool HasBrowserTabs => BrowserTabs.Count > 0;
+    /// <summary>
+    /// True only when the Browser ribbon tab is selected AND at least one browser tab is open.
+    /// Native WebView controls render in their own airspace and ignore a collapsed parent on some
+    /// platforms (e.g. macOS), so the embedded BrowserWebView must be hidden explicitly whenever the
+    /// Browser ribbon is not the active tab; otherwise it keeps painting over the other workspaces.
+    /// </summary>
+    public bool IsBrowserSurfaceVisible => IsBrowserRibbonSelected && HasBrowserTabs;
     public Uri BrowserWorkspaceUri => SelectedBrowserTab?.Url ?? AboutBlankUri;
 
     public string CurrentSurfaceLabel => SelectedSurfaceMode == PresentationSurfaceMode.Presenter ? "Presenter View" : "Participant View";
@@ -144,7 +154,7 @@ public sealed partial class MainViewModel : ObservableObject
         ? PresenterUrl ?? "Not available"
         : ParticipantUrl ?? "Not available";
     public Uri CurrentSurfaceUriOrBlank => Uri.TryCreate(CurrentSurfaceUrl, UriKind.Absolute, out var uri) ? uri : AboutBlankUri;
-    public bool CanShowEmbeddedSurface => IsRunning && _settingsService.Settings.WebView.PreferEmbeddedWebView && CurrentSurfaceUriOrBlank != AboutBlankUri;
+    public bool CanShowEmbeddedSurface => IsRunning && IsNormalWorkspaceVisible && _settingsService.Settings.WebView.PreferEmbeddedWebView && CurrentSurfaceUriOrBlank != AboutBlankUri;
     public bool CanShowBrowserFallback => IsRunning && _settingsService.Settings.WebView.AllowExternalBrowserFallback;
     public bool ShowRibbon => _settingsService.Settings.Appearance.ShowRibbon;
     public bool ShowStatusBar => _settingsService.Settings.Appearance.ShowStatusBar;
@@ -403,6 +413,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (SelectedBrowserTab == tab)
             SelectedBrowserTab = BrowserTabs.LastOrDefault();
         OnPropertyChanged(nameof(HasBrowserTabs));
+        OnPropertyChanged(nameof(IsBrowserSurfaceVisible));
         OnPropertyChanged(nameof(BrowserWorkspaceUri));
     }
 
@@ -468,6 +479,7 @@ public sealed partial class MainViewModel : ObservableObject
             BrowserTabs.Add(tab);
             SelectedBrowserTab = tab;
             OnPropertyChanged(nameof(HasBrowserTabs));
+            OnPropertyChanged(nameof(IsBrowserSurfaceVisible));
         }
 
         if (switchToBrowserRibbon)
@@ -590,6 +602,7 @@ public sealed partial class MainViewModel : ObservableObject
         BrowserTabs.Clear();
         SelectedBrowserTab = null;
         OnPropertyChanged(nameof(HasBrowserTabs));
+        OnPropertyChanged(nameof(IsBrowserSurfaceVisible));
         OnPropertyChanged(nameof(BrowserWorkspaceUri));
         if (SelectedRibbonTab == "Browser")
             SelectedRibbonTab = "Presentation";
