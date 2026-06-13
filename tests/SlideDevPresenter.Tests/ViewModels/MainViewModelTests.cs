@@ -787,6 +787,56 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void IsBrowserSurfaceVisible_WhenBrowserRibbonSelectedAndHasTabs_ReturnsTrue()
+    {
+        var vm = CreateViewModel();
+        vm.OpenInEmbeddedBrowser(new Uri("https://github.com"));
+
+        Assert.True(vm.IsBrowserRibbonSelected);
+        Assert.True(vm.IsBrowserSurfaceVisible);
+    }
+
+    [Fact]
+    public void IsBrowserSurfaceVisible_WhenSwitchingAwayFromBrowserRibbon_ReturnsFalse()
+    {
+        var vm = CreateViewModel();
+        vm.OpenInEmbeddedBrowser(new Uri("https://github.com"));
+        Assert.True(vm.IsBrowserSurfaceVisible);
+
+        vm.SelectHomeRibbon();
+
+        Assert.True(vm.HasBrowserTabs);
+        Assert.False(vm.IsBrowserSurfaceVisible);
+    }
+
+    [Fact]
+    public void IsBrowserSurfaceVisible_WhenBrowserRibbonSelectedButNoTabs_ReturnsFalse()
+    {
+        var vm = CreateViewModel();
+        vm.SelectBrowserRibbon();
+
+        Assert.True(vm.IsBrowserRibbonSelected);
+        Assert.False(vm.HasBrowserTabs);
+        Assert.False(vm.IsBrowserSurfaceVisible);
+    }
+
+    [Fact]
+    public void OpenInEmbeddedBrowser_RaisesIsBrowserSurfaceVisibleChange()
+    {
+        var vm = CreateViewModel();
+        var raised = false;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.IsBrowserSurfaceVisible))
+                raised = true;
+        };
+
+        vm.OpenInEmbeddedBrowser(new Uri("https://github.com"));
+
+        Assert.True(raised);
+    }
+
+    [Fact]
     public void OpenInEmbeddedBrowser_WhenEmbeddedBrowserDisabled_DoesNotOpenTab()
     {
         var settings = new FakeSettingsService();
