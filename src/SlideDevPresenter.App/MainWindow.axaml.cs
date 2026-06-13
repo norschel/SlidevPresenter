@@ -107,12 +107,12 @@ public partial class MainWindow : Window
     }
 
     private void SyncEmbeddedWebViewAttachment()
-        => SyncWebViewAttachment(_embeddedWebViewHost, EmbeddedWebView, _viewModel?.CanShowEmbeddedSurface ?? false);
+        => DeferWebViewAttachment(_embeddedWebViewHost, EmbeddedWebView, () => _viewModel?.CanShowEmbeddedSurface ?? false);
 
     private void SyncBrowserWebViewAttachment()
-        => SyncWebViewAttachment(_browserWebViewHost, BrowserWebView, _viewModel?.IsBrowserSurfaceVisible ?? false);
+        => DeferWebViewAttachment(_browserWebViewHost, BrowserWebView, () => _viewModel?.IsBrowserSurfaceVisible ?? false);
 
-    private static void SyncWebViewAttachment(Panel? host, Control webView, bool shouldBeVisible)
+    private static void DeferWebViewAttachment(Panel? host, Control webView, Func<bool> shouldBeVisible)
     {
         if (host is null)
             return;
@@ -121,9 +121,9 @@ public partial class MainWindow : Window
         // synchronously during input/command handling (e.g. a fast ribbon-button click) can leave
         // the native surface stuck on top because no clean render cycle follows. Deferring to the
         // dispatcher lets the current input cycle finish first, so the detach is applied reliably
-        // regardless of how briefly the button was pressed. The state is re-read inside the closure
-        // so rapid successive switches always converge to the latest requested state.
-        Dispatcher.UIThread.Post(() => ApplyWebViewAttachment(host, webView, shouldBeVisible), DispatcherPriority.Background);
+        // regardless of how briefly the button was pressed. The visibility is re-read inside the
+        // closure so rapid successive switches always converge to the latest requested state.
+        Dispatcher.UIThread.Post(() => ApplyWebViewAttachment(host, webView, shouldBeVisible()), DispatcherPriority.Background);
     }
 
     private static void ApplyWebViewAttachment(Panel host, Control webView, bool shouldBeVisible)
