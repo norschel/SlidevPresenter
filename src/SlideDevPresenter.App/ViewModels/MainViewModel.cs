@@ -245,6 +245,18 @@ public sealed partial class MainViewModel : ObservableObject
             var projects = new List<PresentationProjectViewModel>();
             foreach (var source in sources)
             {
+                if (LooksLikeHostedUrl(source.Location))
+                {
+                    projects.Add(new PresentationProjectViewModel(new PresentationProject
+                    {
+                        Id = source.Id,
+                        Name = source.Name,
+                        SourceType = PresentationSourceType.HostedUrl,
+                        Location = NormalizeHostedUrl(source.Location)
+                    }));
+                    continue;
+                }
+
                 switch (source.Type)
                 {
                     case PresentationSourceType.LocalRoot:
@@ -687,6 +699,15 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     private static string NormalizeHostedUrl(string url) => url.Trim();
+
+    private static bool LooksLikeHostedUrl(string location)
+    {
+        if (!Uri.TryCreate(location?.Trim(), UriKind.Absolute, out var uri))
+            return false;
+
+        return string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string BuildPresenterUrl(string url)
     {

@@ -44,6 +44,8 @@
                         <StackPanel Spacing="8">
                             <TextBlock Text="Name"/>
                             <TextBox Text="{Binding SelectedSource.Name}"/>
+                            <TextBlock Text="Type"/>
+                            <ComboBox ItemsSource="{Binding AvailableSourceTypes}" SelectedItem="{Binding SelectedSource.Type}"/>
                             <TextBlock Text="Location"/>
                             <TextBox Text="{Binding SelectedSource.Location}"/>
                             <CheckBox Content="Enabled" IsChecked="{Binding SelectedSource.IsEnabled}"/>

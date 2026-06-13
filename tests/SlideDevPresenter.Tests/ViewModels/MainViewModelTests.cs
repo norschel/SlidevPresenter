@@ -214,6 +214,28 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public async Task RefreshLibrary_TreatsHttpLocationAsHostedUrl_WhenSavedAsLocalRoot()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.Sources.Add(new PresentationSource
+        {
+            Id = Guid.NewGuid(),
+            Name = "Remote From Root",
+            Type = PresentationSourceType.LocalRoot,
+            Location = "https://slides.example.com/talk",
+            IsEnabled = true
+        });
+
+        var vm = CreateViewModel(settings);
+        await vm.RefreshLibraryAsync();
+
+        Assert.Single(vm.Projects);
+        Assert.Equal("Remote From Root", vm.Projects[0].Name);
+        Assert.Equal(PresentationSourceType.HostedUrl, vm.Projects[0].SourceType);
+        Assert.Equal("https://slides.example.com/talk", vm.Projects[0].Location);
+    }
+
+    [Fact]
     public async Task RefreshLibrary_ClearsPreviousResults()
     {
         var scanner = new FakeSourceScanner();

@@ -14,6 +14,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IThemeService _themeService;
 
     public ObservableCollection<SourceViewModel> Sources { get; } = [];
+    public IReadOnlyList<PresentationSourceType> AvailableSourceTypes { get; } = Enum.GetValues<PresentationSourceType>();
     public IReadOnlyList<string> AvailableModes { get; } = Enum.GetNames<PresentationSurfaceMode>();
     public IReadOnlyList<string> AvailableThemes { get; } = ["System", "Light", "Dark"];
 

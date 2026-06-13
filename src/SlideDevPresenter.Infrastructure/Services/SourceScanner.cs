@@ -24,16 +24,22 @@ public sealed class SourceScanner : ISourceScanner
 
     public IReadOnlyList<PresentationProject> ScanRoot(string rootPath)
     {
-        if (!Directory.Exists(rootPath))
+        if (string.IsNullOrWhiteSpace(rootPath))
         {
-            _logger.LogWarning("Root directory {Path} does not exist, skipping scan.", rootPath);
+            _logger.LogWarning("Root directory path is empty, skipping scan.");
+            return [];
+        }
+
+        // Expand ~ to home directory before validating existence.
+        var expandedPath = ExpandHomePath(rootPath.Trim());
+
+        if (!Directory.Exists(expandedPath))
+        {
+            _logger.LogWarning("Root directory {Path} does not exist, skipping scan.", expandedPath);
             return [];
         }
 
         var results = new List<PresentationProject>();
-
-        // Expand ~ to home directory
-        var expandedPath = ExpandHomePath(rootPath);
 
         try
         {
@@ -66,11 +72,11 @@ public sealed class SourceScanner : ISourceScanner
                 });
             }
 
-            _logger.LogInformation("Scanned {Root}: found {Count} project(s).", rootPath, results.Count);
+            _logger.LogInformation("Scanned {Root}: found {Count} project(s).", expandedPath, results.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error scanning root {Path}.", rootPath);
+            _logger.LogError(ex, "Error scanning root {Path}.", expandedPath);
         }
 
         return results;

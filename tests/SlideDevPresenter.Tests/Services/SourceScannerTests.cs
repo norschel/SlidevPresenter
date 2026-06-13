@@ -155,6 +155,30 @@ public class SourceScannerTests : IDisposable
         Assert.Equal(slidesPath, results[0].SlidesFilePath);
     }
 
+    [Fact]
+    public void ScanRoot_ExpandsHomePathBeforeExistenceCheck()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var rootName = "SlideDevPresenter_SourceScanner_" + Guid.NewGuid().ToString("N");
+        var root = Path.Combine(home, rootName);
+        var projectDir = Path.Combine(root, "home-talk");
+
+        Directory.CreateDirectory(projectDir);
+        File.WriteAllText(Path.Combine(projectDir, "slides.md"), "# Home Talk");
+
+        try
+        {
+            var results = _scanner.ScanRoot($"~/{rootName}");
+            Assert.Single(results);
+            Assert.Equal(projectDir, results[0].Location);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
     // ── ExpandHomePath tests ──────────────────────────────────────────────
 
     [Fact]
