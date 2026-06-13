@@ -120,7 +120,8 @@ public partial class MainWindow : Window
 
         if (shouldBeVisible && !isAttached)
         {
-            // Re-insert below the placeholder content (index 0) so overlays stay on top.
+            // Restore the original XAML order: the WebView sits at index 0 (bottom of the
+            // panel's z-order) with the placeholder content layered above it.
             host.Children.Insert(0, webView);
         }
         else if (!shouldBeVisible && isAttached)
@@ -297,5 +298,13 @@ public partial class MainWindow : Window
         // override is kept as an additional fallback for the bubble phase.
         TryHandleEscape(e);
         base.OnKeyDown(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        if (_viewModel is not null)
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+
+        base.OnClosed(e);
     }
 }
