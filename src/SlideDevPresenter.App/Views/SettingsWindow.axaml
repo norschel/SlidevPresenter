@@ -10,6 +10,7 @@
         Height="540"
         MinWidth="600"
         MinHeight="420"
+        Icon="/Assets/appicon.ico"
         Title="Settings — SlideDevPresenter"
         WindowStartupLocation="CenterOwner">
 

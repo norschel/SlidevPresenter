@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     // removes the native view from the airspace) and re-attach it when it should be shown.
     private Panel? _embeddedWebViewHost;
     private Panel? _browserWebViewHost;
+    private bool _embeddedWebViewsDisabledForSession;
 
     /// <summary>Parameterless constructor for Avalonia designer.</summary>
     public MainWindow()
@@ -78,6 +79,11 @@ public partial class MainWindow : Window
     private void ConfigureEmbeddedWebView()
     {
         _embeddedWebViewHost = EmbeddedWebView.Parent as Panel;
+
+        // Keep native WebView detached by default so startup does not initialize WebView2
+        // before it is actually needed.
+        DetachWebViewIfAttached(_embeddedWebViewHost, EmbeddedWebView);
+
         EmbeddedWebView.NavigationStarted += OnEmbeddedWebViewNavigationStarted;
         EmbeddedWebView.NewWindowRequested += OnEmbeddedWebViewNewWindowRequested;
         EmbeddedWebView.KeyDown += OnWebViewKeyDown;
@@ -87,6 +93,11 @@ public partial class MainWindow : Window
     private void ConfigureBrowserWebView()
     {
         _browserWebViewHost = BrowserWebView.Parent as Panel;
+
+        // Keep native WebView detached by default so startup does not initialize WebView2
+        // before it is actually needed.
+        DetachWebViewIfAttached(_browserWebViewHost, BrowserWebView);
+
         BrowserWebView.NavigationStarted += OnBrowserWebViewNavigationStarted;
         BrowserWebView.NewWindowRequested += OnBrowserWebViewNewWindowRequested;
         BrowserWebView.KeyDown += OnWebViewKeyDown;
@@ -107,10 +118,16 @@ public partial class MainWindow : Window
     }
 
     private void SyncEmbeddedWebViewAttachment()
-        => DeferWebViewAttachment(_embeddedWebViewHost, EmbeddedWebView, () => _viewModel?.CanShowEmbeddedSurface ?? false);
+        => DeferWebViewAttachment(_embeddedWebViewHost, EmbeddedWebView, () => !_embeddedWebViewsDisabledForSession && (_viewModel?.CanShowEmbeddedSurface ?? false));
 
     private void SyncBrowserWebViewAttachment()
-        => DeferWebViewAttachment(_browserWebViewHost, BrowserWebView, () => _viewModel?.IsBrowserSurfaceVisible ?? false);
+        => DeferWebViewAttachment(_browserWebViewHost, BrowserWebView, () => !_embeddedWebViewsDisabledForSession && (_viewModel?.IsBrowserSurfaceVisible ?? false));
+
+    private static void DetachWebViewIfAttached(Panel? host, Control webView)
+    {
+        if (host?.Children.Contains(webView) == true)
+            host.Children.Remove(webView);
+    }
 
     private static void DeferWebViewAttachment(Panel? host, Control webView, Func<bool> shouldBeVisible)
     {
@@ -128,6 +145,13 @@ public partial class MainWindow : Window
 
     private static void ApplyWebViewAttachment(Panel host, Control webView, bool shouldBeVisible)
     {
+        if (!shouldBeVisible && host.Children.Contains(webView))
+        {
+            // Detaching removes the native surface from the OS airspace on macOS.
+            host.Children.Remove(webView);
+            return;
+        }
+
         var isAttached = host.Children.Contains(webView);
 
         if (shouldBeVisible && !isAttached)
@@ -136,11 +160,28 @@ public partial class MainWindow : Window
             // panel's z-order) with the placeholder content layered above it.
             host.Children.Insert(0, webView);
         }
-        else if (!shouldBeVisible && isAttached)
-        {
-            // Detaching removes the native surface from the OS airspace on macOS.
-            host.Children.Remove(webView);
-        }
+    }
+
+    public void DisableEmbeddedWebViewsForSession()
+    {
+        if (_embeddedWebViewsDisabledForSession)
+            return;
+
+        _embeddedWebViewsDisabledForSession = true;
+
+        EmbeddedWebView.NavigationStarted -= OnEmbeddedWebViewNavigationStarted;
+        EmbeddedWebView.NewWindowRequested -= OnEmbeddedWebViewNewWindowRequested;
+        EmbeddedWebView.KeyDown -= OnWebViewKeyDown;
+
+        BrowserWebView.NavigationStarted -= OnBrowserWebViewNavigationStarted;
+        BrowserWebView.NewWindowRequested -= OnBrowserWebViewNewWindowRequested;
+        BrowserWebView.KeyDown -= OnWebViewKeyDown;
+
+        if (_embeddedWebViewHost?.Children.Contains(EmbeddedWebView) == true)
+            _embeddedWebViewHost.Children.Remove(EmbeddedWebView);
+
+        if (_browserWebViewHost?.Children.Contains(BrowserWebView) == true)
+            _browserWebViewHost.Children.Remove(BrowserWebView);
     }
 
     private void OnEmbeddedWebViewNavigationStarted(object? sender, WebViewNavigationStartingEventArgs e)

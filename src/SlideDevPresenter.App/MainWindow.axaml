@@ -11,6 +11,7 @@
         Height="900"
         MinWidth="1100"
         MinHeight="700"
+        Icon="/Assets/appicon.ico"
         Title="SlideDevPresenter">
     <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="320,*">
 

@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="SlideDevPresenter.App.Views.ParticipantWindow"
+    Icon="/Assets/appicon.ico"
         Title="Participant View — SlideDevPresenter"
         Background="Black"
         WindowDecorations="None"

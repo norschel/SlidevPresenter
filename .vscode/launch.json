@@ -10,7 +10,24 @@
             "args": [],
             "cwd": "${workspaceFolder}/src/SlideDevPresenter.App",
             "stopAtEntry": false,
-            "console": "internalConsole"
+            "console": "internalConsole",
+            "exceptionOptions": [
+                {
+                    "path": [
+                        {
+                            "names": [
+                                "CLR Exceptions"
+                            ]
+                        },
+                        {
+                            "names": [
+                                "System.UnauthorizedAccessException"
+                            ]
+                        }
+                    ],
+                    "breakMode": "never"
+                }
+            ]
         }
     ]
 }
