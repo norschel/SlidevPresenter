@@ -25,6 +25,12 @@ public sealed partial class MainViewModel : ObservableObject
     private bool _hasAutoOpenedForCurrentRun;
     private bool _isHostedSessionActive;
     private int? _pendingSlideNavigation;
+    private string? _lastKnownParticipantUrl;
+    private string? _lastKnownPresenterUrl;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
+    private bool _hasLastKnownPosition;
 
     public ObservableCollection<PresentationProjectViewModel> Projects { get; } = [];
     public ObservableCollection<SlideDeckSlide> Slides { get; } = [];
@@ -32,6 +38,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
     private PresentationProjectViewModel? _selectedProject;
 
     [ObservableProperty]
@@ -42,6 +49,7 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(StopCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
     private HostState _hostState = HostState.Idle;
 
     [ObservableProperty]
@@ -83,6 +91,8 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsPresentationRibbonSelected))]
     [NotifyPropertyChangedFor(nameof(IsBrowserRibbonSelected))]
     [NotifyPropertyChangedFor(nameof(IsNormalWorkspaceVisible))]
+    [NotifyPropertyChangedFor(nameof(IsBrowserSurfaceVisible))]
+    [NotifyPropertyChangedFor(nameof(CanShowEmbeddedSurface))]
     private string _selectedRibbonTab = "Home";
 
     [ObservableProperty]
@@ -111,6 +121,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(BrowserWorkspaceUri))]
     [NotifyPropertyChangedFor(nameof(HasBrowserTabs))]
+    [NotifyPropertyChangedFor(nameof(IsBrowserSurfaceVisible))]
     private BrowserTabViewModel? _selectedBrowserTab;
 
     public ObservableCollection<BrowserTabViewModel> BrowserTabs { get; } = [];
@@ -129,6 +140,13 @@ public sealed partial class MainViewModel : ObservableObject
     public bool IsBrowserRibbonSelected => SelectedRibbonTab == "Browser";
     public bool IsNormalWorkspaceVisible => SelectedRibbonTab != "Browser";
     public bool HasBrowserTabs => BrowserTabs.Count > 0;
+    /// <summary>
+    /// True only when the Browser ribbon tab is selected AND at least one browser tab is open.
+    /// Native WebView controls render in their own airspace and ignore a collapsed parent on some
+    /// platforms (e.g. macOS), so the embedded BrowserWebView must be hidden explicitly whenever the
+    /// Browser ribbon is not the active tab; otherwise it keeps painting over the other workspaces.
+    /// </summary>
+    public bool IsBrowserSurfaceVisible => IsBrowserRibbonSelected && HasBrowserTabs;
     public Uri BrowserWorkspaceUri => SelectedBrowserTab?.Url ?? AboutBlankUri;
 
     public string CurrentSurfaceLabel => SelectedSurfaceMode == PresentationSurfaceMode.Presenter ? "Presenter View" : "Participant View";
@@ -136,7 +154,7 @@ public sealed partial class MainViewModel : ObservableObject
         ? PresenterUrl ?? "Not available"
         : ParticipantUrl ?? "Not available";
     public Uri CurrentSurfaceUriOrBlank => Uri.TryCreate(CurrentSurfaceUrl, UriKind.Absolute, out var uri) ? uri : AboutBlankUri;
-    public bool CanShowEmbeddedSurface => IsRunning && _settingsService.Settings.WebView.PreferEmbeddedWebView && CurrentSurfaceUriOrBlank != AboutBlankUri;
+    public bool CanShowEmbeddedSurface => IsRunning && IsNormalWorkspaceVisible && _settingsService.Settings.WebView.PreferEmbeddedWebView && CurrentSurfaceUriOrBlank != AboutBlankUri;
     public bool CanShowBrowserFallback => IsRunning && _settingsService.Settings.WebView.AllowExternalBrowserFallback;
     public bool ShowRibbon => _settingsService.Settings.Appearance.ShowRibbon;
     public bool ShowStatusBar => _settingsService.Settings.Appearance.ShowStatusBar;
@@ -333,6 +351,15 @@ public sealed partial class MainViewModel : ObservableObject
 
     private bool CanStop() => HostState is HostState.Starting or HostState.Running;
 
+    [RelayCommand(CanExecute = nameof(CanResume))]
+    public async Task ResumeAsync()
+    {
+        var slideNumber = ExtractSlideNumber(_lastKnownParticipantUrl) ?? 1;
+        await StartForSlideAsync(slideNumber, SelectedSurfaceMode);
+    }
+
+    private bool CanResume() => IsIdle && SelectedProject is not null && HasLastKnownPosition;
+
     [RelayCommand(CanExecute = nameof(CanRetry))]
     public async Task RetryAsync()
     {
@@ -386,6 +413,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (SelectedBrowserTab == tab)
             SelectedBrowserTab = BrowserTabs.LastOrDefault();
         OnPropertyChanged(nameof(HasBrowserTabs));
+        OnPropertyChanged(nameof(IsBrowserSurfaceVisible));
         OnPropertyChanged(nameof(BrowserWorkspaceUri));
     }
 
@@ -429,7 +457,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (!_settingsService.Settings.Navigation.OpenExternalLinksInEmbeddedBrowser)
             return;
 
-        void Open() => OpenInEmbeddedBrowser(uri);
+        void Open() => OpenInEmbeddedBrowser(uri, switchToBrowserRibbon: false);
 
         if (_syncContext is null || SynchronizationContext.Current == _syncContext)
             Open();
@@ -437,8 +465,8 @@ public sealed partial class MainViewModel : ObservableObject
             _syncContext.Post(_ => Open(), null);
     }
 
-    /// <summary>Opens the given URL in the embedded browser workspace and switches to the Browser ribbon tab.</summary>
-    public void OpenInEmbeddedBrowser(Uri uri)
+    /// <summary>Opens the given URL in the embedded browser workspace.</summary>
+    public void OpenInEmbeddedBrowser(Uri uri, bool switchToBrowserRibbon = true)
     {
         var existing = BrowserTabs.FirstOrDefault(t => t.Url == uri);
         if (existing is not null)
@@ -451,9 +479,11 @@ public sealed partial class MainViewModel : ObservableObject
             BrowserTabs.Add(tab);
             SelectedBrowserTab = tab;
             OnPropertyChanged(nameof(HasBrowserTabs));
+            OnPropertyChanged(nameof(IsBrowserSurfaceVisible));
         }
 
-        SelectedRibbonTab = "Browser";
+        if (switchToBrowserRibbon)
+            SelectedRibbonTab = "Browser";
     }
 
     private async Task LoadSelectedProjectMetadataAsync(PresentationProjectViewModel? projectViewModel)
@@ -520,6 +550,10 @@ public sealed partial class MainViewModel : ObservableObject
             _pendingSlideNavigation = null;
         }
 
+        // Capture current URLs before they are cleared (used for resume on Idle).
+        if (state == HostState.Idle)
+            SaveLastKnownPosition();
+
         HostState = state;
         ParticipantUrl = participantUrl;
         PresenterUrl = presenterUrl;
@@ -543,12 +577,35 @@ public sealed partial class MainViewModel : ObservableObject
             _hasAutoOpenedForCurrentRun = false;
             _ = _presentationWindowService.CloseAsync();
             StopSessionTimer(resetElapsedOnIdle);
+            ClearBrowserWorkspace();
         }
         else if (state == HostState.Error)
         {
             _ = _presentationWindowService.CloseAsync();
             StopSessionTimer(resetElapsed: false);
         }
+    }
+
+    private void SaveLastKnownPosition()
+    {
+        // Capture participant/presenter URLs before they are cleared.
+        if (ParticipantUrl is not null || PresenterUrl is not null)
+        {
+            _lastKnownParticipantUrl = ParticipantUrl;
+            _lastKnownPresenterUrl = PresenterUrl;
+            HasLastKnownPosition = true;
+        }
+    }
+
+    private void ClearBrowserWorkspace()
+    {
+        BrowserTabs.Clear();
+        SelectedBrowserTab = null;
+        OnPropertyChanged(nameof(HasBrowserTabs));
+        OnPropertyChanged(nameof(IsBrowserSurfaceVisible));
+        OnPropertyChanged(nameof(BrowserWorkspaceUri));
+        if (SelectedRibbonTab == "Browser")
+            SelectedRibbonTab = "Presentation";
     }
 
     private void TryOpenBrowser(string? url)
@@ -693,6 +750,21 @@ public sealed partial class MainViewModel : ObservableObject
         };
 
         return builder.Uri.ToString();
+    }
+
+    /// <summary>Extracts the slide number from a Slidev URL fragment (e.g. <c>#/3</c> → 3).</summary>
+    private static int? ExtractSlideNumber(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return null;
+
+        var fragment = uri.Fragment; // e.g. "#/3"
+        if (fragment.StartsWith("#/", StringComparison.Ordinal)
+            && int.TryParse(fragment[2..], out var slideNumber)
+            && slideNumber >= 1)
+            return slideNumber;
+
+        return null;
     }
 
     private static PresentationSurfaceMode ParseSurfaceMode(string? mode) =>

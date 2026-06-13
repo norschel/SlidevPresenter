@@ -1,6 +1,8 @@
+using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Input;
+using Avalonia.Threading;
 using SlideDevPresenter.App.Services;
 using SlideDevPresenter.App.ViewModels;
 using SlideDevPresenter.App.Views;
@@ -15,6 +17,13 @@ public partial class MainWindow : Window
     private readonly IExternalBrowserLauncher _browserLauncher;
     private readonly WebViewNavigationPolicy _navigationPolicy;
     private readonly List<KeyBinding> _presentationKeyBindings = [];
+
+    // Native WebView controls render in their own OS airspace and ignore a collapsed Avalonia
+    // parent on macOS, so toggling IsVisible leaves the native surface painting over the other
+    // workspaces. To reliably hide them we detach the control from its host panel entirely (which
+    // removes the native view from the airspace) and re-attach it when it should be shown.
+    private Panel? _embeddedWebViewHost;
+    private Panel? _browserWebViewHost;
 
     /// <summary>Parameterless constructor for Avalonia designer.</summary>
     public MainWindow()
@@ -44,6 +53,7 @@ public partial class MainWindow : Window
         _browserLauncher = browserLauncher ?? new ExternalBrowserLauncher();
         _navigationPolicy = navigationPolicy ?? new WebViewNavigationPolicy();
         DataContext = viewModel;
+        viewModel.PropertyChanged += OnViewModelPropertyChanged;
         InitializeComponent();
         ConfigureEmbeddedWebView();
         ConfigureBrowserWebView();
@@ -67,16 +77,70 @@ public partial class MainWindow : Window
 
     private void ConfigureEmbeddedWebView()
     {
+        _embeddedWebViewHost = EmbeddedWebView.Parent as Panel;
         EmbeddedWebView.NavigationStarted += OnEmbeddedWebViewNavigationStarted;
         EmbeddedWebView.NewWindowRequested += OnEmbeddedWebViewNewWindowRequested;
         EmbeddedWebView.KeyDown += OnWebViewKeyDown;
+        SyncEmbeddedWebViewAttachment();
     }
 
     private void ConfigureBrowserWebView()
     {
+        _browserWebViewHost = BrowserWebView.Parent as Panel;
         BrowserWebView.NavigationStarted += OnBrowserWebViewNavigationStarted;
         BrowserWebView.NewWindowRequested += OnBrowserWebViewNewWindowRequested;
         BrowserWebView.KeyDown += OnWebViewKeyDown;
+        SyncBrowserWebViewAttachment();
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(MainViewModel.CanShowEmbeddedSurface):
+                SyncEmbeddedWebViewAttachment();
+                break;
+            case nameof(MainViewModel.IsBrowserSurfaceVisible):
+                SyncBrowserWebViewAttachment();
+                break;
+        }
+    }
+
+    private void SyncEmbeddedWebViewAttachment()
+        => DeferWebViewAttachment(_embeddedWebViewHost, EmbeddedWebView, () => _viewModel?.CanShowEmbeddedSurface ?? false);
+
+    private void SyncBrowserWebViewAttachment()
+        => DeferWebViewAttachment(_browserWebViewHost, BrowserWebView, () => _viewModel?.IsBrowserSurfaceVisible ?? false);
+
+    private static void DeferWebViewAttachment(Panel? host, Control webView, Func<bool> shouldBeVisible)
+    {
+        if (host is null)
+            return;
+
+        // Native WebViews are mutated on macOS while the OS still owns the airspace. Detaching
+        // synchronously during input/command handling (e.g. a fast ribbon-button click) can leave
+        // the native surface stuck on top because no clean render cycle follows. Deferring to the
+        // dispatcher lets the current input cycle finish first, so the detach is applied reliably
+        // regardless of how briefly the button was pressed. The visibility is re-read inside the
+        // closure so rapid successive switches always converge to the latest requested state.
+        Dispatcher.UIThread.Post(() => ApplyWebViewAttachment(host, webView, shouldBeVisible()), DispatcherPriority.Background);
+    }
+
+    private static void ApplyWebViewAttachment(Panel host, Control webView, bool shouldBeVisible)
+    {
+        var isAttached = host.Children.Contains(webView);
+
+        if (shouldBeVisible && !isAttached)
+        {
+            // Restore the original XAML order: the WebView sits at index 0 (bottom of the
+            // panel's z-order) with the placeholder content layered above it.
+            host.Children.Insert(0, webView);
+        }
+        else if (!shouldBeVisible && isAttached)
+        {
+            // Detaching removes the native surface from the OS airspace on macOS.
+            host.Children.Remove(webView);
+        }
     }
 
     private void OnEmbeddedWebViewNavigationStarted(object? sender, WebViewNavigationStartingEventArgs e)
@@ -219,9 +283,20 @@ public partial class MainWindow : Window
 
     private void TryHandleEscape(KeyEventArgs e)
     {
-        if (e.Key == Key.Escape && _viewModel?.StopCommand.CanExecute(null) == true)
+        if (e.Key != Key.Escape)
+            return;
+
+        if (_viewModel?.StopCommand.CanExecute(null) == true)
         {
             _viewModel.StopCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (_viewModel?.IsBrowserRibbonSelected == true)
+        {
+            // When no presentation is running but the user is trapped on the Browser tab
+            // (e.g. because they closed the participant window via the X button), ESC
+            // switches back to the Presentation ribbon so the NativeWebView is unloaded.
+            _viewModel.SelectPresentationRibbon();
             e.Handled = true;
         }
     }
@@ -235,5 +310,13 @@ public partial class MainWindow : Window
         // override is kept as an additional fallback for the bubble phase.
         TryHandleEscape(e);
         base.OnKeyDown(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        if (_viewModel is not null)
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+
+        base.OnClosed(e);
     }
 }

@@ -104,7 +104,7 @@ internal sealed class FakePresentationWindowService : IPresentationWindowService
         return Task.CompletedTask;
     }
 
-    public void SimulateEscPressed() => PresentationExited?.Invoke(this, EventArgs.Empty);
+    public void SimulatePresentationExited() => PresentationExited?.Invoke(this, EventArgs.Empty);
     public void SimulateExternalLinkNavigated(Uri uri) => ExternalLinkNavigated?.Invoke(this, uri);
 }
 
@@ -562,7 +562,7 @@ public class MainViewModelTests
         await vm.LaunchAsync();
         host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
 
-        windowService.SimulateEscPressed();
+        windowService.SimulatePresentationExited();
 
         Assert.Equal(HostState.Idle, vm.HostState);
         Assert.Equal(1, host.StopCallCount);
@@ -773,6 +773,70 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void OpenInEmbeddedBrowser_FromPresentationExternalLink_DoesNotSwitchRibbonTab()
+    {
+        var windowService = new FakePresentationWindowService();
+        var vm = CreateViewModel(windowService: windowService);
+        vm.SelectPresentationRibbon();
+
+        windowService.SimulateExternalLinkNavigated(new Uri("https://github.com"));
+
+        Assert.Single(vm.BrowserTabs);
+        Assert.Equal("Presentation", vm.SelectedRibbonTab);
+        Assert.False(vm.IsBrowserRibbonSelected);
+    }
+
+    [Fact]
+    public void IsBrowserSurfaceVisible_WhenBrowserRibbonSelectedAndHasTabs_ReturnsTrue()
+    {
+        var vm = CreateViewModel();
+        vm.OpenInEmbeddedBrowser(new Uri("https://github.com"));
+
+        Assert.True(vm.IsBrowserRibbonSelected);
+        Assert.True(vm.IsBrowserSurfaceVisible);
+    }
+
+    [Fact]
+    public void IsBrowserSurfaceVisible_WhenSwitchingAwayFromBrowserRibbon_ReturnsFalse()
+    {
+        var vm = CreateViewModel();
+        vm.OpenInEmbeddedBrowser(new Uri("https://github.com"));
+        Assert.True(vm.IsBrowserSurfaceVisible);
+
+        vm.SelectHomeRibbon();
+
+        Assert.True(vm.HasBrowserTabs);
+        Assert.False(vm.IsBrowserSurfaceVisible);
+    }
+
+    [Fact]
+    public void IsBrowserSurfaceVisible_WhenBrowserRibbonSelectedButNoTabs_ReturnsFalse()
+    {
+        var vm = CreateViewModel();
+        vm.SelectBrowserRibbon();
+
+        Assert.True(vm.IsBrowserRibbonSelected);
+        Assert.False(vm.HasBrowserTabs);
+        Assert.False(vm.IsBrowserSurfaceVisible);
+    }
+
+    [Fact]
+    public void OpenInEmbeddedBrowser_RaisesIsBrowserSurfaceVisibleChange()
+    {
+        var vm = CreateViewModel();
+        var raised = false;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.IsBrowserSurfaceVisible))
+                raised = true;
+        };
+
+        vm.OpenInEmbeddedBrowser(new Uri("https://github.com"));
+
+        Assert.True(raised);
+    }
+
+    [Fact]
     public void OpenInEmbeddedBrowser_WhenEmbeddedBrowserDisabled_DoesNotOpenTab()
     {
         var settings = new FakeSettingsService();
@@ -784,5 +848,144 @@ public class MainViewModelTests
         windowService.SimulateExternalLinkNavigated(new Uri("https://github.com"));
 
         Assert.Empty(vm.BrowserTabs);
+    }
+
+    // BUG-ESC: Stopping via ESC should clear browser tabs and reset ribbon
+
+    [Fact]
+    public async Task StopAsync_ClearsBrowserTabs()
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+        vm.OpenInEmbeddedBrowser(new Uri("https://github.com"));
+        vm.OpenInEmbeddedBrowser(new Uri("https://docs.microsoft.com"));
+        Assert.Equal(2, vm.BrowserTabs.Count);
+
+        await vm.StopAsync();
+
+        Assert.Empty(vm.BrowserTabs);
+        Assert.Null(vm.SelectedBrowserTab);
+        Assert.False(vm.HasBrowserTabs);
+    }
+
+    [Fact]
+    public async Task StopAsync_WhenBrowserRibbonSelected_SwitchesToPresentationRibbon()
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+        vm.OpenInEmbeddedBrowser(new Uri("https://github.com"));
+        Assert.Equal("Browser", vm.SelectedRibbonTab);
+
+        await vm.StopAsync();
+
+        Assert.Equal("Presentation", vm.SelectedRibbonTab);
+        Assert.False(vm.IsBrowserRibbonSelected);
+        Assert.True(vm.IsNormalWorkspaceVisible);
+    }
+
+    [Fact]
+    public async Task WhenParticipantWindowClosedByUser_ClearsBrowserTabsAndSwitchesRibbon()
+    {
+        // Simulates the user closing the participant window via the X button (or OS close),
+        // which fires PresentationExited — same event path as CloseOnUiThread in
+        // PresentationWindowService after the Closed event subscription was added.
+        var host = new FakeProcessHost();
+        var windowService = new FakePresentationWindowService();
+        var vm = CreateViewModel(host: host, windowService: windowService);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+        vm.OpenInEmbeddedBrowser(new Uri("https://example.com/slide1"));
+        vm.OpenInEmbeddedBrowser(new Uri("https://example.com/slide2"));
+        Assert.Equal(2, vm.BrowserTabs.Count);
+        Assert.Equal("Browser", vm.SelectedRibbonTab);
+
+        // Fires PresentationExited — this now also happens when the window is closed via X.
+        windowService.SimulatePresentationExited();
+
+        Assert.Empty(vm.BrowserTabs);
+        Assert.Equal("Presentation", vm.SelectedRibbonTab);
+        Assert.False(vm.IsBrowserRibbonSelected);
+    }
+
+    [Fact]
+    public async Task StopAsync_SavesLastKnownPosition()
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.StartFromBeginningAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+        // Participant URL is http://localhost:3030/#/1
+
+        await vm.StopAsync();
+
+        Assert.True(vm.HasLastKnownPosition);
+    }
+
+    [Fact]
+    public async Task StopAsync_DoesNotSavePosition_WhenNoUrlsWereEverSet()
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        // Stop without ever running (edge case — HostState never reached Running)
+        // Trigger ApplyStateSnapshot(Idle) directly via a fresh stop
+        host.SimulateError("startup failure");
+        await vm.StopAsync(); // stops from Error state via process host
+        // ParticipantUrl was never set, so HasLastKnownPosition should remain false
+        Assert.False(vm.HasLastKnownPosition);
+    }
+
+    [Fact]
+    public async Task ResumeAsync_RestartsFromLastSlide()
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.StartFromBeginningAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+        // Navigate to slide 5
+        vm.SelectedOutlineSlide = new SlideDeckSlide(5, "Chapter", "Content");
+        await vm.StartFromCurrentSlideAsync();
+        // Now at slide 5; participant URL = http://localhost:3030/#/5
+        await vm.StopAsync();
+
+        Assert.True(vm.HasLastKnownPosition);
+        Assert.True(vm.ResumeCommand.CanExecute(null));
+
+        await vm.ResumeAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        Assert.Equal("http://localhost:3030/#/5", vm.ParticipantUrl);
+        Assert.Equal("http://localhost:3030/presenter/#/5", vm.PresenterUrl);
+    }
+
+    [Fact]
+    public async Task ResumeCommand_CannotExecute_WhenRunning()
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.StartFromBeginningAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        Assert.False(vm.ResumeCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void ResumeCommand_CannotExecute_WhenNoSavedPosition()
+    {
+        var vm = CreateViewModel();
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+
+        Assert.False(vm.HasLastKnownPosition);
+        Assert.False(vm.ResumeCommand.CanExecute(null));
     }
 }

@@ -31,6 +31,7 @@
                             <Button Content="▶ Launch" Command="{Binding LaunchCommand}"/>
                             <Button Content="■ Stop" Command="{Binding StopCommand}"/>
                             <Button Content="↻ Retry" Command="{Binding RetryCommand}"/>
+                            <Button Content="⏎ Resume" Command="{Binding ResumeCommand}" ToolTip.Tip="Resume presentation from last saved position"/>
                             <Button Content="Open Current View" Command="{Binding OpenCurrentSurfaceInBrowserCommand}" IsVisible="{Binding CanShowBrowserFallback}"/>
                             <TextBlock Text="{Binding CurrentSurfaceLabel}" VerticalAlignment="Center" Margin="12,0,0,0"/>
                         </StackPanel>
@@ -55,6 +56,7 @@
                             <Button x:Name="StartPresenterViewButton" Content="Presenter View" Command="{Binding StartPresenterViewCommand}" ToolTip.Tip="Start presenter view"/>
                             <Button Content="■ Stop" Command="{Binding StopCommand}" ToolTip.Tip="Stop presentation"/>
                             <Button Content="↻ Retry" Command="{Binding RetryCommand}" ToolTip.Tip="Retry presentation"/>
+                            <Button Content="⏎ Resume" Command="{Binding ResumeCommand}" ToolTip.Tip="Resume presentation from last saved position"/>
                             <Button Content="Detect Displays" Command="{Binding DetectDisplaysCommand}" ToolTip.Tip="Detect connected displays"/>
                             <TextBlock Text="{Binding DetectedDisplayCount, StringFormat='Displays: {0}'}" VerticalAlignment="Center" Margin="4,0,0,0" IsVisible="{Binding HasDetectedDisplays}"/>
                         </StackPanel>
@@ -244,7 +246,7 @@
                     <Border Grid.Row="1" Background="#101010" CornerRadius="0,0,12,12">
                         <Panel>
                             <NativeWebView x:Name="BrowserWebView"
-                                           IsVisible="{Binding HasBrowserTabs}"
+                                           IsVisible="{Binding IsBrowserSurfaceVisible}"
                                            Source="{Binding BrowserWorkspaceUri}"/>
                             <StackPanel IsVisible="{Binding HasBrowserTabs, Converter={x:Static BoolConverters.Not}}"
                                         HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="420">

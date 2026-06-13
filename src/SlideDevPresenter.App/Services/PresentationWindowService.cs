@@ -42,6 +42,7 @@ public sealed class PresentationWindowService : IPresentationWindowService
         _participantWindow = new ParticipantWindow(participantUrl);
         _participantWindow.PresentationExited += OnParticipantWindowExited;
         _participantWindow.ExternalLinkNavigated += OnParticipantWindowExternalLinkNavigated;
+        _participantWindow.Closed += OnParticipantWindowClosed;
 
         // On multi-display setups move the participant window to the secondary display before showing
         if (displays.Count >= 2 && settings.AutoDetectDisplays)
@@ -62,8 +63,11 @@ public sealed class PresentationWindowService : IPresentationWindowService
         if (_participantWindow is null)
             return;
 
+        // Unsubscribe all handlers before Close() so that OnParticipantWindowClosed
+        // does not treat the programmatic close as a user-initiated close.
         _participantWindow.PresentationExited -= OnParticipantWindowExited;
         _participantWindow.ExternalLinkNavigated -= OnParticipantWindowExternalLinkNavigated;
+        _participantWindow.Closed -= OnParticipantWindowClosed;
         _participantWindow.Close();
         _participantWindow = null;
     }
@@ -71,6 +75,19 @@ public sealed class PresentationWindowService : IPresentationWindowService
     private void OnParticipantWindowExited(object? sender, EventArgs e)
     {
         CloseOnUiThread();
+        PresentationExited?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Fired when the participant window is closed by the user (e.g. clicking the title-bar X
+    /// button) rather than through the normal ESC/exit path. Ensures the session is stopped and
+    /// the browser workspace is cleaned up even in that case.
+    /// </summary>
+    private void OnParticipantWindowClosed(object? sender, EventArgs e)
+    {
+        // CloseOnUiThread() unsubscribes this handler before calling Close(), so reaching
+        // here means the user closed the window directly (not a programmatic close).
+        _participantWindow = null;
         PresentationExited?.Invoke(this, EventArgs.Empty);
     }
 
