@@ -446,7 +446,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (!_settingsService.Settings.Navigation.OpenExternalLinksInEmbeddedBrowser)
             return;
 
-        void Open() => OpenInEmbeddedBrowser(uri);
+        void Open() => OpenInEmbeddedBrowser(uri, switchToBrowserRibbon: false);
 
         if (_syncContext is null || SynchronizationContext.Current == _syncContext)
             Open();
@@ -454,8 +454,8 @@ public sealed partial class MainViewModel : ObservableObject
             _syncContext.Post(_ => Open(), null);
     }
 
-    /// <summary>Opens the given URL in the embedded browser workspace and switches to the Browser ribbon tab.</summary>
-    public void OpenInEmbeddedBrowser(Uri uri)
+    /// <summary>Opens the given URL in the embedded browser workspace.</summary>
+    public void OpenInEmbeddedBrowser(Uri uri, bool switchToBrowserRibbon = true)
     {
         var existing = BrowserTabs.FirstOrDefault(t => t.Url == uri);
         if (existing is not null)
@@ -470,7 +470,8 @@ public sealed partial class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(HasBrowserTabs));
         }
 
-        SelectedRibbonTab = "Browser";
+        if (switchToBrowserRibbon)
+            SelectedRibbonTab = "Browser";
     }
 
     private async Task LoadSelectedProjectMetadataAsync(PresentationProjectViewModel? projectViewModel)

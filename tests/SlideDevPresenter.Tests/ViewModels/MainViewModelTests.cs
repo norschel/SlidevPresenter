@@ -773,6 +773,20 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void OpenInEmbeddedBrowser_FromPresentationExternalLink_DoesNotSwitchRibbonTab()
+    {
+        var windowService = new FakePresentationWindowService();
+        var vm = CreateViewModel(windowService: windowService);
+        vm.SelectPresentationRibbon();
+
+        windowService.SimulateExternalLinkNavigated(new Uri("https://github.com"));
+
+        Assert.Single(vm.BrowserTabs);
+        Assert.Equal("Presentation", vm.SelectedRibbonTab);
+        Assert.False(vm.IsBrowserRibbonSelected);
+    }
+
+    [Fact]
     public void OpenInEmbeddedBrowser_WhenEmbeddedBrowserDisabled_DoesNotOpenTab()
     {
         var settings = new FakeSettingsService();
