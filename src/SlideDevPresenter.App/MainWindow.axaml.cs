@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Input;
@@ -15,6 +16,13 @@ public partial class MainWindow : Window
     private readonly IExternalBrowserLauncher _browserLauncher;
     private readonly WebViewNavigationPolicy _navigationPolicy;
     private readonly List<KeyBinding> _presentationKeyBindings = [];
+
+    // Native WebView controls render in their own OS airspace and ignore a collapsed Avalonia
+    // parent on macOS, so toggling IsVisible leaves the native surface painting over the other
+    // workspaces. To reliably hide them we detach the control from its host panel entirely (which
+    // removes the native view from the airspace) and re-attach it when it should be shown.
+    private Panel? _embeddedWebViewHost;
+    private Panel? _browserWebViewHost;
 
     /// <summary>Parameterless constructor for Avalonia designer.</summary>
     public MainWindow()
@@ -44,6 +52,7 @@ public partial class MainWindow : Window
         _browserLauncher = browserLauncher ?? new ExternalBrowserLauncher();
         _navigationPolicy = navigationPolicy ?? new WebViewNavigationPolicy();
         DataContext = viewModel;
+        viewModel.PropertyChanged += OnViewModelPropertyChanged;
         InitializeComponent();
         ConfigureEmbeddedWebView();
         ConfigureBrowserWebView();
@@ -67,16 +76,58 @@ public partial class MainWindow : Window
 
     private void ConfigureEmbeddedWebView()
     {
+        _embeddedWebViewHost = EmbeddedWebView.Parent as Panel;
         EmbeddedWebView.NavigationStarted += OnEmbeddedWebViewNavigationStarted;
         EmbeddedWebView.NewWindowRequested += OnEmbeddedWebViewNewWindowRequested;
         EmbeddedWebView.KeyDown += OnWebViewKeyDown;
+        SyncEmbeddedWebViewAttachment();
     }
 
     private void ConfigureBrowserWebView()
     {
+        _browserWebViewHost = BrowserWebView.Parent as Panel;
         BrowserWebView.NavigationStarted += OnBrowserWebViewNavigationStarted;
         BrowserWebView.NewWindowRequested += OnBrowserWebViewNewWindowRequested;
         BrowserWebView.KeyDown += OnWebViewKeyDown;
+        SyncBrowserWebViewAttachment();
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(MainViewModel.CanShowEmbeddedSurface):
+                SyncEmbeddedWebViewAttachment();
+                break;
+            case nameof(MainViewModel.IsBrowserSurfaceVisible):
+                SyncBrowserWebViewAttachment();
+                break;
+        }
+    }
+
+    private void SyncEmbeddedWebViewAttachment()
+        => SyncWebViewAttachment(_embeddedWebViewHost, EmbeddedWebView, _viewModel?.CanShowEmbeddedSurface ?? false);
+
+    private void SyncBrowserWebViewAttachment()
+        => SyncWebViewAttachment(_browserWebViewHost, BrowserWebView, _viewModel?.IsBrowserSurfaceVisible ?? false);
+
+    private static void SyncWebViewAttachment(Panel? host, Control webView, bool shouldBeVisible)
+    {
+        if (host is null)
+            return;
+
+        var isAttached = host.Children.Contains(webView);
+
+        if (shouldBeVisible && !isAttached)
+        {
+            // Re-insert below the placeholder content (index 0) so overlays stay on top.
+            host.Children.Insert(0, webView);
+        }
+        else if (!shouldBeVisible && isAttached)
+        {
+            // Detaching removes the native surface from the OS airspace on macOS.
+            host.Children.Remove(webView);
+        }
     }
 
     private void OnEmbeddedWebViewNavigationStarted(object? sender, WebViewNavigationStartingEventArgs e)
