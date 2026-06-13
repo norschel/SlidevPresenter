@@ -104,7 +104,7 @@ internal sealed class FakePresentationWindowService : IPresentationWindowService
         return Task.CompletedTask;
     }
 
-    public void SimulateEscPressed() => PresentationExited?.Invoke(this, EventArgs.Empty);
+    public void SimulatePresentationExited() => PresentationExited?.Invoke(this, EventArgs.Empty);
     public void SimulateExternalLinkNavigated(Uri uri) => ExternalLinkNavigated?.Invoke(this, uri);
 }
 
@@ -562,7 +562,7 @@ public class MainViewModelTests
         await vm.LaunchAsync();
         host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
 
-        windowService.SimulateEscPressed();
+        windowService.SimulatePresentationExited();
 
         Assert.Equal(HostState.Idle, vm.HostState);
         Assert.Equal(1, host.StopCallCount);
@@ -823,6 +823,31 @@ public class MainViewModelTests
         Assert.Equal("Presentation", vm.SelectedRibbonTab);
         Assert.False(vm.IsBrowserRibbonSelected);
         Assert.True(vm.IsNormalWorkspaceVisible);
+    }
+
+    [Fact]
+    public async Task WhenParticipantWindowClosedByUser_ClearsBrowserTabsAndSwitchesRibbon()
+    {
+        // Simulates the user closing the participant window via the X button (or OS close),
+        // which fires PresentationExited — same event path as CloseOnUiThread in
+        // PresentationWindowService after the Closed event subscription was added.
+        var host = new FakeProcessHost();
+        var windowService = new FakePresentationWindowService();
+        var vm = CreateViewModel(host: host, windowService: windowService);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+        vm.OpenInEmbeddedBrowser(new Uri("https://example.com/slide1"));
+        vm.OpenInEmbeddedBrowser(new Uri("https://example.com/slide2"));
+        Assert.Equal(2, vm.BrowserTabs.Count);
+        Assert.Equal("Browser", vm.SelectedRibbonTab);
+
+        // Fires PresentationExited — this now also happens when the window is closed via X.
+        windowService.SimulatePresentationExited();
+
+        Assert.Empty(vm.BrowserTabs);
+        Assert.Equal("Presentation", vm.SelectedRibbonTab);
+        Assert.False(vm.IsBrowserRibbonSelected);
     }
 
     [Fact]
