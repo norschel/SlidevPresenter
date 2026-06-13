@@ -537,7 +537,7 @@ public sealed partial class MainViewModel : ObservableObject
             _pendingSlideNavigation = null;
         }
 
-        // Capture current URLs before they are overwritten (used for resume on Idle).
+        // Capture current URLs before they are cleared (used for resume on Idle).
         if (state == HostState.Idle)
             SaveLastKnownPosition();
 

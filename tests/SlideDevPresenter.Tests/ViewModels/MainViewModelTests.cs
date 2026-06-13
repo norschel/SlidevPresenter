@@ -862,7 +862,7 @@ public class MainViewModelTests
         vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
         await vm.StartFromBeginningAsync();
         host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
-        // Slides to slide 5
+        // Navigate to slide 5
         vm.SelectedOutlineSlide = new SlideDeckSlide(5, "Chapter", "Content");
         await vm.StartFromCurrentSlideAsync();
         // Now at slide 5; participant URL = http://localhost:3030/#/5
