@@ -25,6 +25,12 @@ public sealed partial class MainViewModel : ObservableObject
     private bool _hasAutoOpenedForCurrentRun;
     private bool _isHostedSessionActive;
     private int? _pendingSlideNavigation;
+    private string? _lastKnownParticipantUrl;
+    private string? _lastKnownPresenterUrl;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
+    private bool _hasLastKnownPosition;
 
     public ObservableCollection<PresentationProjectViewModel> Projects { get; } = [];
     public ObservableCollection<SlideDeckSlide> Slides { get; } = [];
@@ -32,6 +38,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
     private PresentationProjectViewModel? _selectedProject;
 
     [ObservableProperty]
@@ -42,6 +49,7 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(StopCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
     private HostState _hostState = HostState.Idle;
 
     [ObservableProperty]
@@ -333,6 +341,15 @@ public sealed partial class MainViewModel : ObservableObject
 
     private bool CanStop() => HostState is HostState.Starting or HostState.Running;
 
+    [RelayCommand(CanExecute = nameof(CanResume))]
+    public async Task ResumeAsync()
+    {
+        var slideNumber = ExtractSlideNumber(_lastKnownParticipantUrl) ?? 1;
+        await StartForSlideAsync(slideNumber, SelectedSurfaceMode);
+    }
+
+    private bool CanResume() => IsIdle && SelectedProject is not null && HasLastKnownPosition;
+
     [RelayCommand(CanExecute = nameof(CanRetry))]
     public async Task RetryAsync()
     {
@@ -520,6 +537,10 @@ public sealed partial class MainViewModel : ObservableObject
             _pendingSlideNavigation = null;
         }
 
+        // Capture current URLs before they are overwritten (used for resume on Idle).
+        if (state == HostState.Idle)
+            SaveLastKnownPosition();
+
         HostState = state;
         ParticipantUrl = participantUrl;
         PresenterUrl = presenterUrl;
@@ -543,12 +564,34 @@ public sealed partial class MainViewModel : ObservableObject
             _hasAutoOpenedForCurrentRun = false;
             _ = _presentationWindowService.CloseAsync();
             StopSessionTimer(resetElapsedOnIdle);
+            ClearBrowserWorkspace();
         }
         else if (state == HostState.Error)
         {
             _ = _presentationWindowService.CloseAsync();
             StopSessionTimer(resetElapsed: false);
         }
+    }
+
+    private void SaveLastKnownPosition()
+    {
+        // Capture participant/presenter URLs before they are cleared.
+        if (ParticipantUrl is not null || PresenterUrl is not null)
+        {
+            _lastKnownParticipantUrl = ParticipantUrl;
+            _lastKnownPresenterUrl = PresenterUrl;
+            HasLastKnownPosition = true;
+        }
+    }
+
+    private void ClearBrowserWorkspace()
+    {
+        BrowserTabs.Clear();
+        SelectedBrowserTab = null;
+        OnPropertyChanged(nameof(HasBrowserTabs));
+        OnPropertyChanged(nameof(BrowserWorkspaceUri));
+        if (SelectedRibbonTab == "Browser")
+            SelectedRibbonTab = "Presentation";
     }
 
     private void TryOpenBrowser(string? url)
@@ -693,6 +736,21 @@ public sealed partial class MainViewModel : ObservableObject
         };
 
         return builder.Uri.ToString();
+    }
+
+    /// <summary>Extracts the slide number from a Slidev URL fragment (e.g. <c>#/3</c> → 3).</summary>
+    private static int? ExtractSlideNumber(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return null;
+
+        var fragment = uri.Fragment; // e.g. "#/3"
+        if (fragment.StartsWith("#/", StringComparison.Ordinal)
+            && int.TryParse(fragment[2..], out var slideNumber)
+            && slideNumber >= 1)
+            return slideNumber;
+
+        return null;
     }
 
     private static PresentationSurfaceMode ParseSurfaceMode(string? mode) =>
