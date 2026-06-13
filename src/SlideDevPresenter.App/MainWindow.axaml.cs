@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Input;
+using Avalonia.Threading;
 using SlideDevPresenter.App.Services;
 using SlideDevPresenter.App.ViewModels;
 using SlideDevPresenter.App.Views;
@@ -116,6 +117,17 @@ public partial class MainWindow : Window
         if (host is null)
             return;
 
+        // Native WebViews are mutated on macOS while the OS still owns the airspace. Detaching
+        // synchronously during input/command handling (e.g. a fast ribbon-button click) can leave
+        // the native surface stuck on top because no clean render cycle follows. Deferring to the
+        // dispatcher lets the current input cycle finish first, so the detach is applied reliably
+        // regardless of how briefly the button was pressed. The state is re-read inside the closure
+        // so rapid successive switches always converge to the latest requested state.
+        Dispatcher.UIThread.Post(() => ApplyWebViewAttachment(host, webView, shouldBeVisible), DispatcherPriority.Background);
+    }
+
+    private static void ApplyWebViewAttachment(Panel host, Control webView, bool shouldBeVisible)
+    {
         var isAttached = host.Children.Contains(webView);
 
         if (shouldBeVisible && !isAttached)
