@@ -1,0 +1,74 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build Solution",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"build",
+				".\\SlideDevPresenter.sln"
+			],
+			"group": "build",
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "Build App (Debug)",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"build",
+				".\\src\\SlideDevPresenter.App\\SlideDevPresenter.App.csproj",
+				"-c",
+				"Debug"
+			],
+			"group": "build",
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "Run App",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"run",
+				"--project",
+				".\\src\\SlideDevPresenter.App\\SlideDevPresenter.App.csproj",
+				"-c",
+				"Debug"
+			],
+			"group": {
+				"kind": "none",
+				"isDefault": false
+			}
+		},
+		{
+			"label": "Build + Run App",
+			"dependsOn": [
+				"Build App (Debug)",
+				"Run App (No Build)"
+			],
+			"dependsOrder": "sequence",
+			"group": {
+				"kind": "none",
+				"isDefault": false
+			}
+		},
+		{
+			"label": "Run App (No Build)",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"run",
+				"--project",
+				".\\src\\SlideDevPresenter.App\\SlideDevPresenter.App.csproj",
+				"-c",
+				"Debug",
+				"--no-build"
+			],
+			"group": {
+				"kind": "none",
+				"isDefault": false
+			}
+		}
+	]
+}

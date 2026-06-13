@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug App",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "Build App (Debug)",
+            "program": "${workspaceFolder}/src/SlideDevPresenter.App/bin/Debug/net10.0/SlideDevPresenter.App.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/SlideDevPresenter.App",
+            "stopAtEntry": false,
+            "console": "internalConsole"
+        }
+    ]
+}
