@@ -22,18 +22,25 @@ public partial class SettingsWindow : Window
         if (DataContext is not SettingsViewModel viewModel)
             return;
 
-        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        try
         {
-            Title = "Export configuration",
-            SuggestedFileName = "SlideDevPresenter-settings.json",
-            DefaultExtension = "json",
-            FileTypeChoices = [new FilePickerFileType("JSON") { Patterns = ["*.json"] }]
-        });
-        if (file is null)
-            return;
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Export configuration",
+                SuggestedFileName = "SlideDevPresenter-settings.json",
+                DefaultExtension = "json",
+                FileTypeChoices = [new FilePickerFileType("JSON") { Patterns = ["*.json"] }]
+            });
+            if (file is null)
+                return;
 
-        await using var stream = await file.OpenWriteAsync();
-        await viewModel.ExportConfigurationAsync(stream);
+            await using var stream = await file.OpenWriteAsync();
+            await viewModel.ExportConfigurationAsync(stream);
+        }
+        catch (Exception ex)
+        {
+            viewModel.ConfigurationMessage = $"Export failed: {ex.Message}";
+        }
     }
 
     private async void Import_Click(object? sender, RoutedEventArgs e)
@@ -41,17 +48,24 @@ public partial class SettingsWindow : Window
         if (DataContext is not SettingsViewModel viewModel)
             return;
 
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        try
         {
-            Title = "Import configuration",
-            AllowMultiple = false,
-            FileTypeFilter = [new FilePickerFileType("JSON") { Patterns = ["*.json"] }]
-        });
-        if (files.Count == 0)
-            return;
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Import configuration",
+                AllowMultiple = false,
+                FileTypeFilter = [new FilePickerFileType("JSON") { Patterns = ["*.json"] }]
+            });
+            if (files.Count == 0)
+                return;
 
-        await using var stream = await files[0].OpenReadAsync();
-        await viewModel.ImportConfigurationAsync(stream);
+            await using var stream = await files[0].OpenReadAsync();
+            await viewModel.ImportConfigurationAsync(stream);
+        }
+        catch (Exception ex)
+        {
+            viewModel.ConfigurationMessage = $"Import failed: {ex.Message}";
+        }
     }
 
     private void Close_Click(object? sender, RoutedEventArgs e) => Close();
