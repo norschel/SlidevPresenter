@@ -81,6 +81,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _openExternalLinksInEmbeddedBrowser;
 
+    [ObservableProperty]
+    private string? _configurationMessage;
+
     public string? ShortcutConflictError => ValidateShortcuts();
 
     public SettingsViewModel(ISettingsService settingsService)
@@ -222,6 +225,34 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         await _settingsService.SaveAsync();
         _themeService.ApplyTheme(Theme);
+    }
+
+    public async Task ExportConfigurationAsync(Stream destination)
+    {
+        try
+        {
+            await _settingsService.ExportAsync(destination);
+            ConfigurationMessage = "Configuration exported.";
+        }
+        catch (Exception ex)
+        {
+            ConfigurationMessage = $"Export failed: {ex.Message}";
+        }
+    }
+
+    public async Task ImportConfigurationAsync(Stream source)
+    {
+        try
+        {
+            await _settingsService.ImportAsync(source);
+            LoadFromSettings(_settingsService.Settings);
+            _themeService.ApplyTheme(Theme);
+            ConfigurationMessage = "Configuration imported.";
+        }
+        catch (Exception ex)
+        {
+            ConfigurationMessage = $"Import failed: {ex.Message}";
+        }
     }
 
     private string? ValidateShortcuts()
