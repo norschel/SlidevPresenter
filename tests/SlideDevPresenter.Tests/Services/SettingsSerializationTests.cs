@@ -34,6 +34,70 @@ public class SettingsSerializationTests
     }
 
     [Fact]
+    public async Task ExportAsync_ThenImportAsync_RoundTripsCompleteConfiguration()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var service = CreateService(path);
+            service.Settings.Sources.Add(new PresentationSource
+            {
+                Id = Guid.NewGuid(),
+                Name = "Slides",
+                Type = PresentationSourceType.LocalRoot,
+                Location = "~/slides",
+                IsEnabled = false
+            });
+            service.Settings.Defaults.DefaultPort = 4040;
+            service.Settings.Appearance.Theme = "Dark";
+            service.Settings.WebView.PreferEmbeddedWebView = false;
+            service.Settings.DisplayManagement.RestoreDisplayTopologyOnExit = true;
+            service.Settings.Shortcuts.StartFromBeginning = "Ctrl+F5";
+            service.Settings.Navigation.OpenExternalLinksInSystemBrowser = false;
+
+            await using var stream = new MemoryStream();
+            await service.ExportAsync(stream);
+            stream.Position = 0;
+
+            var imported = CreateService(path);
+            await imported.ImportAsync(stream);
+
+            Assert.Single(imported.Settings.Sources);
+            Assert.Equal("~/slides", imported.Settings.Sources[0].Location);
+            Assert.Equal(4040, imported.Settings.Defaults.DefaultPort);
+            Assert.Equal("Dark", imported.Settings.Appearance.Theme);
+            Assert.False(imported.Settings.WebView.PreferEmbeddedWebView);
+            Assert.True(imported.Settings.DisplayManagement.RestoreDisplayTopologyOnExit);
+            Assert.Equal("Ctrl+F5", imported.Settings.Shortcuts.StartFromBeginning);
+            Assert.False(imported.Settings.Navigation.OpenExternalLinksInSystemBrowser);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenConfigurationIsInvalid_DoesNotReplaceSettings()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var service = CreateService(path);
+            service.Settings.Defaults.DefaultPort = 4444;
+            await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"defaults\":null}"));
+
+            await Assert.ThrowsAsync<InvalidDataException>(() => service.ImportAsync(stream));
+
+            Assert.Equal(4444, service.Settings.Defaults.DefaultPort);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task SaveAsync_ThenLoadAsync_RoundTripsSources()
     {
         var path = Path.GetTempFileName();

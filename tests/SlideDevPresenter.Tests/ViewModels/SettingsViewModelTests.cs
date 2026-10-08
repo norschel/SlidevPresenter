@@ -133,4 +133,27 @@ public sealed class SettingsViewModelTests
         Assert.False(settings.Settings.Navigation.OpenExternalLinksInSystemBrowser);
         Assert.True(settings.Settings.Navigation.OpenExternalLinksInEmbeddedBrowser);
     }
+
+    [Fact]
+    public async Task ImportConfigurationAsync_RefreshesSettingsAndAppliesImportedTheme()
+    {
+        var settings = new FakeSettingsService();
+        var themeService = new FakeThemeService();
+        var vm = new SettingsViewModel(settings, themeService);
+        var importedSettings = new SlideDevPresenter.Core.Models.AppSettings
+        {
+            Appearance = new() { Theme = "Dark" },
+            Defaults = new() { DefaultPort = 4444 }
+        };
+        await using var stream = new MemoryStream();
+        await System.Text.Json.JsonSerializer.SerializeAsync(stream, importedSettings);
+        stream.Position = 0;
+
+        await vm.ImportConfigurationAsync(stream);
+
+        Assert.Equal(4444, vm.DefaultPort);
+        Assert.Equal("Dark", vm.Theme);
+        Assert.Equal("Dark", themeService.LastAppliedTheme);
+        Assert.Equal("Configuration imported.", vm.ConfigurationMessage);
+    }
 }

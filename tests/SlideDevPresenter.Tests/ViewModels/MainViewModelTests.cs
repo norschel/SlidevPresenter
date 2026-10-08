@@ -1,14 +1,21 @@
 using SlideDevPresenter.App.ViewModels;
 using SlideDevPresenter.Core.Models;
 using SlideDevPresenter.Core.Services;
+using System.Text.Json;
 
 namespace SlideDevPresenter.Tests.ViewModels;
 
 internal sealed class FakeSettingsService : ISettingsService
 {
-    public AppSettings Settings { get; } = new();
+    public AppSettings Settings { get; private set; } = new();
     public Task LoadAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task SaveAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task ExportAsync(Stream destination, CancellationToken cancellationToken = default) =>
+        JsonSerializer.SerializeAsync(destination, Settings, cancellationToken: cancellationToken);
+
+    public async Task ImportAsync(Stream source, CancellationToken cancellationToken = default) =>
+        Settings = await JsonSerializer.DeserializeAsync<AppSettings>(source, cancellationToken: cancellationToken)
+                   ?? new AppSettings();
 }
 
 internal sealed class FakeSourceScanner : ISourceScanner
