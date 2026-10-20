@@ -14,7 +14,8 @@ public static class PresentationSourceListSerializer
     private static readonly HashSet<string> SensitiveQueryKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "access_token", "refresh_token", "token", "api_key", "apikey", "password", "passwd",
-        "client_secret", "authorization", "auth", "signature", "sig"
+        "client_secret", "authorization", "auth", "auth_token", "oauth_token", "oauth_signature",
+        "signature", "sig"
     };
 
     public static async Task ExportAsync(
@@ -23,7 +24,6 @@ public static class PresentationSourceListSerializer
         CancellationToken cancellationToken = default)
     {
         var entries = sources
-            .Where(source => source.Type == PresentationSourceType.HostedUrl)
             .Select(source => TryCreateEntry(source, out var entry) ? entry : null)
             .OfType<SourceListEntry>()
             .ToList();
@@ -93,7 +93,7 @@ public static class PresentationSourceListSerializer
 
         entry = new SourceListEntry
         {
-            Title = source.Name,
+            Title = string.IsNullOrWhiteSpace(source.Name) ? address.Value : source.Name,
             Address = address.Value,
             Type = isGitHub ? "github" : address.IsHttp ? "http" : "https",
             Comment = source.Comment,
@@ -122,19 +122,42 @@ public static class PresentationSourceListSerializer
 
         var removedAuthentication = !string.IsNullOrEmpty(uri.UserInfo);
         var builder = new UriBuilder(uri) { UserName = string.Empty, Password = string.Empty };
-        var query = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries);
-        var safeQuery = query.Where(part =>
+        builder.Query = FilterSensitiveParameters(uri.Query.TrimStart('?'), ref removedAuthentication);
+
+        var fragment = uri.Fragment.TrimStart('#');
+        var queryStart = fragment.IndexOf('?');
+        var fragmentParameters = queryStart >= 0 ? fragment[(queryStart + 1)..] : fragment;
+        var safeFragmentParameters = FilterSensitiveParameters(fragmentParameters, ref removedAuthentication);
+        if (!string.Equals(fragmentParameters, safeFragmentParameters, StringComparison.Ordinal))
         {
-            var key = Uri.UnescapeDataString(part.Split('=', 2)[0].Replace('+', ' '));
-            if (!SensitiveQueryKeys.Contains(key))
-                return true;
-            removedAuthentication = true;
-            return false;
-        });
-        builder.Query = string.Join('&', safeQuery);
+            fragment = queryStart >= 0
+                ? string.Concat(fragment[..(queryStart + 1)], safeFragmentParameters)
+                : safeFragmentParameters;
+            builder.Fragment = fragment;
+        }
 
         address = new SanitizedAddress(builder.Uri.AbsoluteUri, isHttp, removedAuthentication);
         return true;
+    }
+
+    private static string FilterSensitiveParameters(string parameters, ref bool removedAuthentication)
+    {
+        var safeParameters = new List<string>();
+        foreach (var parameter in parameters.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var key = Uri.UnescapeDataString(parameter.Split('=', 2)[0].Replace('+', ' '));
+            if (SensitiveQueryKeys.Contains(key)
+                || key.StartsWith("x-amz-", StringComparison.OrdinalIgnoreCase)
+                || key.StartsWith("x-goog-", StringComparison.OrdinalIgnoreCase))
+            {
+                removedAuthentication = true;
+                continue;
+            }
+
+            safeParameters.Add(parameter);
+        }
+
+        return string.Join('&', safeParameters);
     }
 
     private readonly record struct SanitizedAddress(string Value, bool IsHttp, bool AuthenticationRemoved);

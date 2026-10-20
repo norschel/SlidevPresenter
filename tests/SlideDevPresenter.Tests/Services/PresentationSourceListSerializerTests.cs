@@ -50,6 +50,39 @@ public sealed class PresentationSourceListSerializerTests
     }
 
     [Fact]
+    public async Task ExportAsync_SanitizesCredentialsForAnyHttpSourceAndFallsBackToAddressForBlankName()
+    {
+        var sources = new[]
+        {
+            new PresentationSource
+            {
+                Id = Guid.NewGuid(),
+                Name = " ",
+                Type = PresentationSourceType.LocalRoot,
+                Location = "https://slides.example.com/talk?auth_token=auth-secret&oauth_token=oauth-secret&X-Amz-Credential=aws-secret&X-Goog-Signature=google-secret&ref=main#access_token=fragment-secret&slide=4"
+            }
+        };
+        await using var stream = new MemoryStream();
+
+        await PresentationSourceListSerializer.ExportAsync(sources, stream);
+        stream.Position = 0;
+        using var document = await JsonDocument.ParseAsync(stream);
+        var entry = Assert.Single(document.RootElement.GetProperty("sources").EnumerateArray());
+        const string sanitizedAddress = "https://slides.example.com/talk?ref=main#slide=4";
+
+        Assert.Equal(sanitizedAddress, entry.GetProperty("address").GetString());
+        Assert.Equal(sanitizedAddress, entry.GetProperty("title").GetString());
+        Assert.True(entry.GetProperty("requiresAuthentication").GetBoolean());
+
+        var json = Encoding.UTF8.GetString(stream.ToArray());
+        Assert.DoesNotContain("auth-secret", json);
+        Assert.DoesNotContain("oauth-secret", json);
+        Assert.DoesNotContain("aws-secret", json);
+        Assert.DoesNotContain("google-secret", json);
+        Assert.DoesNotContain("fragment-secret", json);
+    }
+
+    [Fact]
     public async Task ImportAsync_ImportsOnlineSourcesAndMarksAuthenticationNeeded()
     {
         const string json = """
@@ -96,6 +129,42 @@ public sealed class PresentationSourceListSerializerTests
         Assert.Equal("http://slides.example.com/talk", sources[1].Location);
         Assert.Equal("https://slides.example.com/secure", sources[2].Location);
         Assert.True(sources[2].RequiresAuthentication);
+    }
+
+    [Fact]
+    public async Task ImportAsync_RemovesCredentialParametersAndPreservesOrdinarySlideAnchors()
+    {
+        const string json = """
+            {
+              "version": 1,
+              "sources": [
+                {
+                  "title": "Slides",
+                  "address": "https://slides.example.com/talk?auth_token=auth-secret&oauth_token=oauth-secret&X-Amz-Credential=aws-secret&X-Goog-Signature=google-secret&ref=main#access_token=fragment-secret&slide=4",
+                  "type": "https",
+                  "comment": "",
+                  "isPublic": true,
+                  "requiresAuthentication": false
+                },
+                {
+                  "title": "Anchored slides",
+                  "address": "https://slides.example.com/talk#slide-4",
+                  "type": "https",
+                  "comment": "",
+                  "isPublic": true,
+                  "requiresAuthentication": false
+                }
+              ]
+            }
+            """;
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+
+        var sources = await PresentationSourceListSerializer.ImportAsync(stream);
+
+        Assert.Equal("https://slides.example.com/talk?ref=main#slide=4", sources[0].Location);
+        Assert.True(sources[0].RequiresAuthentication);
+        Assert.Equal("https://slides.example.com/talk#slide-4", sources[1].Location);
+        Assert.False(sources[1].RequiresAuthentication);
     }
 
     [Fact]
