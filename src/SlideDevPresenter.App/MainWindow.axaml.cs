@@ -80,6 +80,16 @@ public partial class MainWindow : Window
         await _viewModel.RefreshLibraryAsync();
     }
 
+    private async void Branch_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_viewModel is null || e.AddedItems.Count == 0
+            || e.AddedItems[0] is not string branch
+            || string.Equals(branch, _viewModel.SelectedBranch, StringComparison.Ordinal))
+            return;
+
+        await _viewModel.ChangeSelectedBranchAsync(branch);
+    }
+
     private async Task<bool> ConfirmRepositoryUpdateAsync(string message)
     {
         var dialog = new Window

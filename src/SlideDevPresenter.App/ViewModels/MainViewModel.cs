@@ -21,6 +21,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly IDisplaySelector _displaySelector;
     private readonly ISlideDeckPdfExporter _slideDeckPdfExporter;
     private readonly IGitRepositoryService _gitRepositoryService;
+    private int _branchLoadVersion;
     public Func<string, Task<bool>> ConfirmRepositoryUpdateAsync { get; set; } = _ => Task.FromResult(false);
 
     [ObservableProperty]
@@ -43,8 +44,14 @@ public sealed partial class MainViewModel : ObservableObject
 
     public ObservableCollection<PresentationProjectViewModel> Projects { get; } = [];
     public ObservableCollection<SlideDeckSlide> Slides { get; } = [];
+    public ObservableCollection<string> AvailableBranches { get; } = [];
 
     [ObservableProperty]
+    private string? _selectedBranch;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRepositoryProjectSelected))]
+    [NotifyPropertyChangedFor(nameof(CanChangeSelectedBranch))]
     [NotifyPropertyChangedFor(nameof(CanExportPdf))]
     [NotifyPropertyChangedFor(nameof(CanRemoveSelectedProject))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
@@ -65,6 +72,7 @@ public sealed partial class MainViewModel : ObservableObject
     private string? _libraryMessage;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanChangeSelectedBranch))]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
     [NotifyPropertyChangedFor(nameof(IsStarting))]
     [NotifyPropertyChangedFor(nameof(IsRunning))]
@@ -98,6 +106,7 @@ public sealed partial class MainViewModel : ObservableObject
     private string? _errorMessage;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanChangeSelectedBranch))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
     [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
@@ -173,6 +182,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// Browser ribbon is not the active tab; otherwise it keeps painting over the other workspaces.
     /// </summary>
     public bool IsBrowserSurfaceVisible => IsBrowserRibbonSelected && HasBrowserTabs;
+    public bool IsRepositoryProjectSelected => GetRepositorySource(SelectedProject) is not null;
+    public bool CanChangeSelectedBranch => IsRepositoryProjectSelected && AvailableBranches.Count > 0
+        && !IsRefreshing && HostState == HostState.Idle;
     public Uri BrowserWorkspaceUri => SelectedBrowserTab?.Url ?? AboutBlankUri;
 
     public string CurrentSurfaceLabel => SelectedSurfaceMode == PresentationSurfaceMode.Presenter ? "Presenter View" : "Participant View";
@@ -244,6 +256,7 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnSelectedProjectChanged(PresentationProjectViewModel? value)
     {
         _ = LoadSelectedProjectMetadataAsync(value);
+        _ = LoadSelectedRepositoryBranchesAsync(value);
     }
 
     partial void OnSelectedOutlineSlideChanged(SlideDeckSlide? value)
@@ -312,7 +325,7 @@ public sealed partial class MainViewModel : ObservableObject
                                 SourceType = PresentationSourceType.LocalProject,
                                 Location = project.Location,
                                 SlidesFilePath = project.SlidesFilePath
-                            }));
+                            }, source.Id));
                         }
                         if (scanned.Count == 0)
                             messages.Add($"No Slidev presentations found in {prepared.Directory}. Check the checkout and slides.md, then refresh.");
@@ -386,6 +399,69 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var bytes = System.Text.Encoding.UTF8.GetBytes(sourceId + ":" + relativePath);
         return new Guid(System.Security.Cryptography.SHA256.HashData(bytes).AsSpan(0, 16));
+    }
+
+    private PresentationSource? GetRepositorySource(PresentationProjectViewModel? project) =>
+        project?.RepositorySourceId is Guid sourceId
+            ? _settingsService.Settings.Sources.FirstOrDefault(source => source.Id == sourceId
+                && source.Type is PresentationSourceType.Git or PresentationSourceType.GitHub)
+            : null;
+
+    private async Task LoadSelectedRepositoryBranchesAsync(PresentationProjectViewModel? project)
+    {
+        var version = ++_branchLoadVersion;
+        AvailableBranches.Clear();
+        SelectedBranch = null;
+        OnPropertyChanged(nameof(IsRepositoryProjectSelected));
+        OnPropertyChanged(nameof(CanChangeSelectedBranch));
+
+        var source = GetRepositorySource(project);
+        if (source is null)
+            return;
+
+        SelectedBranch = source.Branch;
+        try
+        {
+            var branches = await _gitRepositoryService.GetBranchesAsync(source);
+            if (version != _branchLoadVersion)
+                return;
+
+            foreach (var branch in branches)
+                AvailableBranches.Add(branch);
+            if (!string.IsNullOrWhiteSpace(source.Branch) && !AvailableBranches.Contains(source.Branch))
+                AvailableBranches.Insert(0, source.Branch);
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            if (version == _branchLoadVersion)
+                SourceMessage = exception.Message;
+        }
+
+        OnPropertyChanged(nameof(CanChangeSelectedBranch));
+    }
+
+    public async Task ChangeSelectedBranchAsync(string branch)
+    {
+        var source = GetRepositorySource(SelectedProject);
+        if (source is null || !CanChangeSelectedBranch || !AvailableBranches.Contains(branch))
+            return;
+
+        if (string.Equals(source.Branch, branch, StringComparison.Ordinal))
+            return;
+
+        source.Branch = branch;
+        SelectedBranch = branch;
+        try
+        {
+            await _settingsService.SaveAsync();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            SourceMessage = $"Could not save the selected branch. {exception.Message}";
+            return;
+        }
+
+        await RefreshLibraryAsync();
     }
 
     [RelayCommand(CanExecute = nameof(CanLaunch))]

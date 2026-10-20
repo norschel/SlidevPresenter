@@ -7,6 +7,7 @@ namespace SlideDevPresenter.App.ViewModels;
 public sealed partial class PresentationProjectViewModel : ObservableObject
 {
     public Guid Id { get; }
+    public Guid? RepositorySourceId { get; }
 
     [ObservableProperty]
     private string _name;
@@ -20,9 +21,10 @@ public sealed partial class PresentationProjectViewModel : ObservableObject
     [ObservableProperty]
     private string? _slidesFilePath;
 
-    public PresentationProjectViewModel(PresentationProject project)
+    public PresentationProjectViewModel(PresentationProject project, Guid? repositorySourceId = null)
     {
         Id = project.Id;
+        RepositorySourceId = repositorySourceId;
         _name = project.Name;
         _location = project.Location;
         _sourceType = project.SourceType;

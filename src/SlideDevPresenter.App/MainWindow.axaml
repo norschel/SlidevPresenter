@@ -23,6 +23,14 @@
                     <ToggleButton Content="View" IsChecked="{Binding IsViewRibbonSelected, Mode=OneWay}" Command="{Binding SelectViewRibbonCommand}"/>
                     <ToggleButton Content="Presentation" IsChecked="{Binding IsPresentationRibbonSelected, Mode=OneWay}" Command="{Binding SelectPresentationRibbonCommand}"/>
                     <ToggleButton Content="Browser" IsChecked="{Binding IsBrowserRibbonSelected, Mode=OneWay}" Command="{Binding SelectBrowserRibbonCommand}"/>
+                    <TextBlock Text="Branch" VerticalAlignment="Center" IsVisible="{Binding IsRepositoryProjectSelected}"/>
+                    <ComboBox ItemsSource="{Binding AvailableBranches}"
+                              SelectedItem="{Binding SelectedBranch, Mode=OneWay}"
+                              SelectionChanged="Branch_SelectionChanged"
+                              MinWidth="170"
+                              IsVisible="{Binding IsRepositoryProjectSelected}"
+                              IsEnabled="{Binding CanChangeSelectedBranch}"
+                              ToolTip.Tip="Switch the selected repository presentation to another branch"/>
                     <Button Content="Settings" Click="Settings_Click" ToolTip.Tip="Open application settings"/>
                 </StackPanel>
 
