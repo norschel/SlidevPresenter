@@ -72,6 +72,19 @@ public sealed class WebViewKeyboardBridgeTests
     }
 
     [Theory]
+    [InlineData(Key.P, "p")]
+    [InlineData(Key.N, "n")]
+    public void GetKeyScript_ForNavigationButton_IgnoresFocusedEditor(Key key, string value)
+    {
+        var script = WebViewKeyboardBridge.GetKeyScript(key, KeyModifiers.None, useFocusedElement: false);
+
+        Assert.Contains($"key:\"{value}\"", script);
+        Assert.Contains("target:document.body", script);
+        Assert.DoesNotContain("document.activeElement", script);
+        Assert.Contains("target:document.activeElement", WebViewKeyboardBridge.GetKeyScript(key, KeyModifiers.None));
+    }
+
+    [Theory]
     [InlineData(Key.Escape)]
     [InlineData(Key.Right)]
     [InlineData(Key.Space)]

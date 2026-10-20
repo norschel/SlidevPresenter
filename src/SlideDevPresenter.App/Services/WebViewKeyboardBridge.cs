@@ -89,11 +89,11 @@ public static class WebViewKeyboardBridge
         return true;
     }
 
-    private static async Task DispatchKeyAsync(NativeWebView webView, Key key, KeyModifiers modifiers)
+    public static async Task DispatchKeyAsync(NativeWebView webView, Key key, KeyModifiers modifiers, bool useFocusedElement = true)
     {
         try
         {
-            await webView.InvokeScript(Script + GetKeyScript(key, modifiers));
+            await webView.InvokeScript(Script + GetKeyScript(key, modifiers, useFocusedElement));
         }
         catch (Exception exception)
         {
@@ -101,7 +101,7 @@ public static class WebViewKeyboardBridge
         }
     }
 
-    public static string? GetKeyScript(Key key, KeyModifiers modifiers)
+    public static string? GetKeyScript(Key key, KeyModifiers modifiers, bool useFocusedElement = true)
     {
         if ((modifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) != 0)
             return null;
@@ -117,7 +117,8 @@ public static class WebViewKeyboardBridge
         };
 
         return "window.__sdpHandlePresentationKey?.({key:" + JsonSerializer.Serialize(value)
-            + ",target:document.activeElement,preventDefault:function(){},stopImmediatePropagation:function(){}});";
+            + ",target:" + (useFocusedElement ? "document.activeElement" : "document.body")
+            + ",preventDefault:function(){},stopImmediatePropagation:function(){}});";
     }
 
     public static bool IsEscapeMessage(string? body) =>

@@ -33,6 +33,8 @@
                             <Button Content="■ Stop" Command="{Binding StopCommand}"/>
                             <Button Content="↻ Retry" Command="{Binding RetryCommand}"/>
                             <Button Content="⏎ Resume" Command="{Binding ResumeCommand}" ToolTip.Tip="Resume presentation from last saved position"/>
+                            <Button Content="◀ Prev" Click="PreviousSlide_Click" IsVisible="{Binding IsRunning}" IsEnabled="{Binding CanShowEmbeddedSurface}" ToolTip.Tip="Previous slide"/>
+                            <Button Content="Next ▶" Click="NextSlide_Click" IsVisible="{Binding IsRunning}" IsEnabled="{Binding CanShowEmbeddedSurface}" ToolTip.Tip="Next slide"/>
                             <Button Content="Open Current View" Command="{Binding OpenCurrentSurfaceInBrowserCommand}" IsVisible="{Binding CanShowBrowserFallback}"/>
                             <TextBlock Text="{Binding CurrentSurfaceLabel}" VerticalAlignment="Center" Margin="12,0,0,0"/>
                         </StackPanel>
@@ -59,6 +61,8 @@
                             <Button Content="■ Stop" Command="{Binding StopCommand}" ToolTip.Tip="Stop presentation"/>
                             <Button Content="↻ Retry" Command="{Binding RetryCommand}" ToolTip.Tip="Retry presentation"/>
                             <Button Content="⏎ Resume" Command="{Binding ResumeCommand}" ToolTip.Tip="Resume presentation from last saved position"/>
+                            <Button Content="◀ Prev" Click="PreviousSlide_Click" IsVisible="{Binding IsRunning}" IsEnabled="{Binding CanShowEmbeddedSurface}" ToolTip.Tip="Previous slide"/>
+                            <Button Content="Next ▶" Click="NextSlide_Click" IsVisible="{Binding IsRunning}" IsEnabled="{Binding CanShowEmbeddedSurface}" ToolTip.Tip="Next slide"/>
                             <Button Content="Detect Displays" Command="{Binding DetectDisplaysCommand}" ToolTip.Tip="Detect connected displays"/>
                             <TextBlock Text="{Binding DetectedDisplayCount, StringFormat='Displays: {0}'}" VerticalAlignment="Center" Margin="4,0,0,0" IsVisible="{Binding HasDetectedDisplays}"/>
                         </StackPanel>
