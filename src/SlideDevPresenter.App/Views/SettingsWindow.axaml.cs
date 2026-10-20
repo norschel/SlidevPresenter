@@ -37,7 +37,15 @@ public partial class SettingsWindow : Window
             await using var stream = await file.OpenWriteAsync();
             await viewModel.ExportConfigurationAsync(stream);
         }
-        catch (Exception ex)
+        catch (System.IO.IOException ex)
+        {
+            viewModel.ConfigurationMessage = $"Export failed: {ex.Message}";
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            viewModel.ConfigurationMessage = $"Export failed: {ex.Message}";
+        }
+        catch (System.Text.Json.JsonException ex)
         {
             viewModel.ConfigurationMessage = $"Export failed: {ex.Message}";
         }
