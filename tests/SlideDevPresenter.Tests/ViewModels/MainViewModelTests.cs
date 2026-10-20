@@ -154,6 +154,24 @@ public class MainViewModelTests
         Assert.Null(vm.SelectedProject);
     }
 
+    [Theory]
+    [InlineData(HostState.Idle, false)]
+    [InlineData(HostState.Starting, false)]
+    [InlineData(HostState.Running, true)]
+    [InlineData(HostState.Error, false)]
+    public void IsRunning_ForNavigationVisibility_NotifiesOnStateChange(HostState state, bool expected)
+    {
+        var vm = CreateViewModel();
+        vm.HostState = state == HostState.Running ? HostState.Idle : HostState.Running;
+        var changedProperties = new List<string?>();
+        vm.PropertyChanged += (_, e) => changedProperties.Add(e.PropertyName);
+
+        vm.HostState = state;
+
+        Assert.Equal(expected, vm.IsRunning);
+        Assert.Contains(nameof(MainViewModel.IsRunning), changedProperties);
+    }
+
     [Fact]
     public async Task RefreshLibrary_PopulatesProjectsFromLocalRoot()
     {

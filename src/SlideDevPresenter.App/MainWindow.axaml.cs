@@ -370,6 +370,18 @@ public partial class MainWindow : Window
         e.Handled || (!_embeddedWebViewsDisabledForSession && _viewModel?.CanShowEmbeddedSurface == true
             && WebViewKeyboardBridge.TryHandleKey(EmbeddedWebView, e, _isPresentationBlanked));
 
+    private async void PreviousSlide_Click(object? sender, RoutedEventArgs e) =>
+        await NavigateSlideAsync(Key.P);
+
+    private async void NextSlide_Click(object? sender, RoutedEventArgs e) =>
+        await NavigateSlideAsync(Key.N);
+
+    private async Task NavigateSlideAsync(Key key)
+    {
+        if (!_embeddedWebViewsDisabledForSession && _viewModel?.CanShowEmbeddedSurface == true)
+            await WebViewKeyboardBridge.DispatchKeyAsync(EmbeddedWebView, key, KeyModifiers.None, useFocusedElement: false);
+    }
+
     private void TryHandleEscape(KeyEventArgs e)
     {
         if (e.Handled || e.Key != Key.Escape)
