@@ -85,7 +85,9 @@ public partial class MainWindow : Window
         DetachWebViewIfAttached(_embeddedWebViewHost, EmbeddedWebView);
 
         EmbeddedWebView.NavigationStarted += OnEmbeddedWebViewNavigationStarted;
+        EmbeddedWebView.NavigationCompleted += OnWebViewNavigationCompleted;
         EmbeddedWebView.NewWindowRequested += OnEmbeddedWebViewNewWindowRequested;
+        EmbeddedWebView.WebMessageReceived += OnWebViewWebMessageReceived;
         EmbeddedWebView.KeyDown += OnWebViewKeyDown;
         SyncEmbeddedWebViewAttachment();
     }
@@ -99,7 +101,9 @@ public partial class MainWindow : Window
         DetachWebViewIfAttached(_browserWebViewHost, BrowserWebView);
 
         BrowserWebView.NavigationStarted += OnBrowserWebViewNavigationStarted;
+        BrowserWebView.NavigationCompleted += OnWebViewNavigationCompleted;
         BrowserWebView.NewWindowRequested += OnBrowserWebViewNewWindowRequested;
+        BrowserWebView.WebMessageReceived += OnWebViewWebMessageReceived;
         BrowserWebView.KeyDown += OnWebViewKeyDown;
         SyncBrowserWebViewAttachment();
     }
@@ -170,11 +174,15 @@ public partial class MainWindow : Window
         _embeddedWebViewsDisabledForSession = true;
 
         EmbeddedWebView.NavigationStarted -= OnEmbeddedWebViewNavigationStarted;
+        EmbeddedWebView.NavigationCompleted -= OnWebViewNavigationCompleted;
         EmbeddedWebView.NewWindowRequested -= OnEmbeddedWebViewNewWindowRequested;
+        EmbeddedWebView.WebMessageReceived -= OnWebViewWebMessageReceived;
         EmbeddedWebView.KeyDown -= OnWebViewKeyDown;
 
         BrowserWebView.NavigationStarted -= OnBrowserWebViewNavigationStarted;
+        BrowserWebView.NavigationCompleted -= OnWebViewNavigationCompleted;
         BrowserWebView.NewWindowRequested -= OnBrowserWebViewNewWindowRequested;
+        BrowserWebView.WebMessageReceived -= OnWebViewWebMessageReceived;
         BrowserWebView.KeyDown -= OnWebViewKeyDown;
 
         if (_embeddedWebViewHost?.Children.Contains(EmbeddedWebView) == true)
@@ -322,24 +330,54 @@ public partial class MainWindow : Window
         TryHandleEscape(e);
     }
 
+    private async void OnWebViewNavigationCompleted(object? sender, WebViewNavigationCompletedEventArgs e)
+    {
+        if (!e.IsSuccess || sender is not NativeWebView webView)
+            return;
+
+        try
+        {
+            await webView.InvokeScript(WebViewEscapeBridge.Script);
+        }
+        catch
+        {
+            // Script injection is best-effort; the Avalonia key handlers remain as fallback.
+        }
+    }
+
+    private void OnWebViewWebMessageReceived(object? sender, WebMessageReceivedEventArgs e)
+    {
+        if (WebViewEscapeBridge.IsEscapeMessage(e.Body))
+            HandleEscape();
+    }
+
     private void TryHandleEscape(KeyEventArgs e)
     {
         if (e.Key != Key.Escape)
             return;
 
+        if (HandleEscape())
+            e.Handled = true;
+    }
+
+    private bool HandleEscape()
+    {
         if (_viewModel?.StopCommand.CanExecute(null) == true)
         {
             _viewModel.StopCommand.Execute(null);
-            e.Handled = true;
+            return true;
         }
-        else if (_viewModel?.IsBrowserRibbonSelected == true)
+
+        if (_viewModel?.IsBrowserRibbonSelected == true)
         {
             // When no presentation is running but the user is trapped on the Browser tab
             // (e.g. because they closed the participant window via the X button), ESC
             // switches back to the Presentation ribbon so the NativeWebView is unloaded.
             _viewModel.SelectPresentationRibbon();
-            e.Handled = true;
+            return true;
         }
+
+        return false;
     }
 
     protected override void OnKeyDown(KeyEventArgs e)

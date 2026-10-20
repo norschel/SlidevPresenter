@@ -10,6 +10,10 @@ public sealed class WebViewNavigationPolicy
         if (!IsWebScheme(request))
             return true;
 
+        // No page is loaded yet, so this must be the programmatic initial navigation.
+        if (!HasLoadedPage(current))
+            return false;
+
         if (IsInternalSlideNavigation(request, current))
             return false;
 
@@ -21,14 +25,14 @@ public sealed class WebViewNavigationPolicy
         if (!request.IsAbsoluteUri)
             return IsInternalRelative(request);
 
-        if (!HasSlideFragment(request))
-            return false;
-
-        if (IsLocalSlideHost(request))
+        if (current is { IsAbsoluteUri: true } && IsSameOrigin(request, current))
             return true;
 
-        return current is { IsAbsoluteUri: true } && IsSameOrigin(request, current);
+        return HasSlideFragment(request) && IsLocalSlideHost(request);
     }
+
+    private static bool HasLoadedPage(Uri? current) =>
+        current is { IsAbsoluteUri: true } && IsWebScheme(current);
 
     private static bool IsInternalRelative(Uri request)
     {

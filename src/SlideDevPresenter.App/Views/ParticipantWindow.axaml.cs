@@ -60,7 +60,9 @@ public partial class ParticipantWindow : Window
         AddHandler(InputElement.KeyDownEvent, OnWindowPreviewKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
         WebView.KeyDown += OnWindowPreviewKeyDown;
         WebView.NavigationStarted += OnWebViewNavigationStarted;
+        WebView.NavigationCompleted += OnWebViewNavigationCompleted;
         WebView.NewWindowRequested += OnWebViewNewWindowRequested;
+        WebView.WebMessageReceived += OnWebViewWebMessageReceived;
     }
 
     private void OnWindowPreviewKeyDown(object? sender, KeyEventArgs e)
@@ -69,6 +71,27 @@ public partial class ParticipantWindow : Window
         // processed it (e.g. to exit an embedded fullscreen video).
         if (_escapeHandler.TryHandle(e.Key))
             e.Handled = true;
+    }
+
+    private async void OnWebViewNavigationCompleted(object? sender, WebViewNavigationCompletedEventArgs e)
+    {
+        if (!e.IsSuccess)
+            return;
+
+        try
+        {
+            await WebView.InvokeScript(WebViewEscapeBridge.Script);
+        }
+        catch
+        {
+            // Script injection is best-effort; the Avalonia key handlers remain as fallback.
+        }
+    }
+
+    private void OnWebViewWebMessageReceived(object? sender, WebMessageReceivedEventArgs e)
+    {
+        if (WebViewEscapeBridge.IsEscapeMessage(e.Body))
+            _escapeHandler.TryHandle(Key.Escape);
     }
 
     private void OnOpened(object? sender, EventArgs e)
