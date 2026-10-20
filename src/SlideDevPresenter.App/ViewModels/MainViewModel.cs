@@ -449,6 +449,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (string.Equals(source.Branch, branch, StringComparison.Ordinal))
             return;
 
+        var previousBranch = source.Branch;
         source.Branch = branch;
         SelectedBranch = branch;
         try
@@ -457,6 +458,8 @@ public sealed partial class MainViewModel : ObservableObject
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
+            source.Branch = previousBranch;
+            SelectedBranch = previousBranch;
             SourceMessage = $"Could not save the selected branch. {exception.Message}";
             return;
         }
