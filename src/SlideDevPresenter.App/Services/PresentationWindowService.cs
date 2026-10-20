@@ -13,6 +13,7 @@ public sealed class PresentationWindowService : IPresentationWindowService
     private readonly IDisplayService _displayService;
     private readonly ISettingsService _settingsService;
     private ParticipantWindow? _participantWindow;
+    private (PixelPoint Position, WindowState State)? _mainWindowOrigin;
 
     public event EventHandler? PresentationExited;
     public event EventHandler<Uri>? ExternalLinkNavigated;
@@ -31,7 +32,11 @@ public sealed class PresentationWindowService : IPresentationWindowService
 
     public Task CloseAsync(CancellationToken cancellationToken = default)
     {
-        Dispatcher.UIThread.Post(CloseOnUiThread);
+        Dispatcher.UIThread.Post(() =>
+        {
+            CloseOnUiThread();
+            RestoreMainWindowPosition();
+        });
         return Task.CompletedTask;
     }
 
@@ -77,6 +82,9 @@ public sealed class PresentationWindowService : IPresentationWindowService
         if (alternate is null)
             return;
 
+        // Keep the first origin across re-opens within the same session so Restore returns to where the user started.
+        _mainWindowOrigin ??= (mainWindow.Position, mainWindow.WindowState);
+
         // A maximized/fullscreen window cannot be repositioned; normalize, move, then restore the state.
         var previousState = mainWindow.WindowState;
         if (previousState != WindowState.Normal)
@@ -86,6 +94,26 @@ public sealed class PresentationWindowService : IPresentationWindowService
 
         if (previousState is WindowState.Maximized or WindowState.FullScreen)
             mainWindow.WindowState = previousState;
+    }
+
+    /// <summary>Moves the main window back to where it was before the participant view displaced it.</summary>
+    private void RestoreMainWindowPosition()
+    {
+        if (_mainWindowOrigin is not { } origin)
+            return;
+
+        _mainWindowOrigin = null;
+
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } mainWindow })
+            return;
+
+        if (mainWindow.WindowState != WindowState.Normal)
+            mainWindow.WindowState = WindowState.Normal;
+
+        mainWindow.Position = origin.Position;
+
+        if (origin.State is WindowState.Maximized or WindowState.FullScreen)
+            mainWindow.WindowState = origin.State;
     }
 
     private DisplayInfo? PickDefaultDisplay(DisplayManagementSettings settings)
@@ -117,6 +145,7 @@ public sealed class PresentationWindowService : IPresentationWindowService
     private void OnParticipantWindowExited(object? sender, EventArgs e)
     {
         CloseOnUiThread();
+        RestoreMainWindowPosition();
         PresentationExited?.Invoke(this, EventArgs.Empty);
     }
 
@@ -130,6 +159,7 @@ public sealed class PresentationWindowService : IPresentationWindowService
         // CloseOnUiThread() unsubscribes this handler before calling Close(), so reaching
         // here means the user closed the window directly (not a programmatic close).
         _participantWindow = null;
+        RestoreMainWindowPosition();
         PresentationExited?.Invoke(this, EventArgs.Empty);
     }
 
