@@ -267,6 +267,44 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
+    public async Task ExportSourceListAsync(Stream destination)
+    {
+        try
+        {
+            await PresentationSourceListSerializer.ExportAsync(
+                Sources.Select(source => source.ToModel()),
+                destination);
+            ConfigurationMessage = "Source list exported.";
+        }
+        catch (IOException ex)
+        {
+            ConfigurationMessage = $"Export failed: {ex.Message}";
+        }
+    }
+
+    public async Task ImportSourceListAsync(Stream source)
+    {
+        try
+        {
+            var importedSources = await PresentationSourceListSerializer.ImportAsync(source);
+            foreach (var importedSource in importedSources)
+                Sources.Add(new SourceViewModel(importedSource));
+            ConfigurationMessage = "Source list imported.";
+        }
+        catch (IOException ex)
+        {
+            ConfigurationMessage = $"Import failed: {ex.Message}";
+        }
+        catch (InvalidDataException ex)
+        {
+            ConfigurationMessage = $"Import failed: {ex.Message}";
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            ConfigurationMessage = $"Import failed: {ex.Message}";
+        }
+    }
+
     private string? ValidateShortcuts()
     {
         var shortcuts = new[]

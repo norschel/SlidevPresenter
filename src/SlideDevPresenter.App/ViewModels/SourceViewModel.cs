@@ -18,6 +18,15 @@ public sealed partial class SourceViewModel : ObservableObject
     [ObservableProperty]
     private bool _isEnabled;
 
+    [ObservableProperty]
+    private string _comment;
+
+    [ObservableProperty]
+    private bool _isPublic;
+
+    [ObservableProperty]
+    private bool _requiresAuthentication;
+
     public Guid Id { get; }
 
     public SourceViewModel(PresentationSource source)
@@ -27,6 +36,9 @@ public sealed partial class SourceViewModel : ObservableObject
         _location = source.Location;
         _type = source.Type;
         _isEnabled = source.IsEnabled;
+        _comment = source.Comment;
+        _isPublic = source.IsPublic;
+        _requiresAuthentication = source.RequiresAuthentication;
     }
 
     public PresentationSource ToModel() => new()
@@ -35,6 +47,9 @@ public sealed partial class SourceViewModel : ObservableObject
         Name = Name,
         Location = Location,
         Type = Type,
-        IsEnabled = IsEnabled
+        IsEnabled = IsEnabled,
+        Comment = Comment,
+        IsPublic = IsPublic,
+        RequiresAuthentication = RequiresAuthentication
     };
 }
