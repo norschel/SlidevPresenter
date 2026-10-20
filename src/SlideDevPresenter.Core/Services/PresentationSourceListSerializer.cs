@@ -56,6 +56,30 @@ public static class PresentationSourceListSerializer
                 || entry.Comment is null)
                 throw new InvalidDataException("A source entry is missing required information.");
 
+            if (entry.Type.ToLowerInvariant() is "git" or "github-repository")
+            {
+                var repositoryType = entry.Type.Equals("git", StringComparison.OrdinalIgnoreCase)
+                    ? PresentationSourceType.Git : PresentationSourceType.GitHub;
+                string remote;
+                try { remote = RepositoryLocation.Normalize(entry.Address, repositoryType); }
+                catch (ArgumentException exception)
+                {
+                    throw new InvalidDataException(exception.Message, exception);
+                }
+                result.Add(new PresentationSource
+                {
+                    Id = Guid.NewGuid(),
+                    Name = entry.Title.Trim(),
+                    Type = repositoryType,
+                    Location = remote,
+                    Branch = entry.Branch,
+                    Comment = entry.Comment,
+                    IsPublic = entry.IsPublic,
+                    RequiresAuthentication = entry.RequiresAuthentication
+                });
+                continue;
+            }
+
             if (!TrySanitizeAddress(entry.Address, out var address, out var isGitHub, out var isHttp))
                 throw new InvalidDataException("Source addresses must be valid HTTP or HTTPS URLs.");
 
@@ -88,6 +112,23 @@ public static class PresentationSourceListSerializer
     private static bool TryCreateEntry(PresentationSource source, out SourceListEntry? entry)
     {
         entry = null;
+        if (source.Type is PresentationSourceType.Git or PresentationSourceType.GitHub)
+        {
+            string remote;
+            try { remote = RepositoryLocation.Normalize(source.Location, source.Type); }
+            catch (ArgumentException) { return false; }
+            entry = new SourceListEntry
+            {
+                Title = string.IsNullOrWhiteSpace(source.Name) ? remote : source.Name,
+                Address = remote,
+                Branch = source.Branch,
+                Type = source.Type == PresentationSourceType.Git ? "git" : "github-repository",
+                Comment = source.Comment,
+                IsPublic = source.IsPublic,
+                RequiresAuthentication = source.RequiresAuthentication
+            };
+            return true;
+        }
         if (!TrySanitizeAddress(source.Location, out var address, out var isGitHub, out _))
             return false;
 
@@ -170,6 +211,7 @@ public static class PresentationSourceListSerializer
 
     private sealed class SourceListEntry
     {
+        public string? Branch { get; init; }
         public required string Title { get; init; }
         public required string Address { get; init; }
         public required string Type { get; init; }

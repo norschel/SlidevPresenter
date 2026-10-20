@@ -52,6 +52,7 @@ public partial class MainWindow : Window
         WebViewNavigationPolicy? navigationPolicy = null)
     {
         _viewModel = viewModel;
+        viewModel.ConfirmRepositoryUpdateAsync = ConfirmRepositoryUpdateAsync;
         _shortcutService = shortcutService ?? new ShortcutService(new RuntimePlatformInfo());
         _themeService = themeService ?? new ThemeService();
         _browserLauncher = browserLauncher ?? new ExternalBrowserLauncher();
@@ -77,6 +78,52 @@ public partial class MainWindow : Window
         _viewModel.RefreshPreferences();
         ReconfigureShortcuts();
         await _viewModel.RefreshLibraryAsync();
+    }
+
+    private async Task<bool> ConfirmRepositoryUpdateAsync(string message)
+    {
+        var dialog = new Window
+        {
+            Title = "Repository changes",
+            Width = 520,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+        var keep = new Button { Content = "Keep local copy" };
+        var update = new Button { Content = "Continue in terminal" };
+        keep.Click += (_, _) => dialog.Close(false);
+        update.Click += (_, _) => dialog.Close(true);
+        dialog.Content = new StackPanel
+        {
+            Margin = new Avalonia.Thickness(20),
+            Spacing = 16,
+            Children =
+            {
+                new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Children = { keep, update }
+                }
+            }
+        };
+        var hadEmbeddedView = _embeddedWebViewHost?.Children.Contains(EmbeddedWebView) == true;
+        var hadBrowserView = _browserWebViewHost?.Children.Contains(BrowserWebView) == true;
+        if (hadEmbeddedView)
+            _embeddedWebViewHost!.Children.Remove(EmbeddedWebView);
+        if (hadBrowserView)
+            _browserWebViewHost!.Children.Remove(BrowserWebView);
+        try { return await dialog.ShowDialog<bool>(this); }
+        finally
+        {
+            if (hadEmbeddedView)
+                _embeddedWebViewHost!.Children.Add(EmbeddedWebView);
+            if (hadBrowserView)
+                _browserWebViewHost!.Children.Add(BrowserWebView);
+        }
     }
 
     private async void ExportPdf_Click(object? sender, RoutedEventArgs e)

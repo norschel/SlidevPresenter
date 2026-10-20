@@ -9,6 +9,8 @@ public sealed class SlidevProcessHost : ISlidevProcessHost
 {
     private readonly ILogger<SlidevProcessHost> _logger;
     private readonly Func<ProcessStartInfo, IRunningProcess> _processFactory;
+    private readonly ISlideDeckBuilder? _builder;
+    private CancellationTokenSource? _startupCts;
     private IRunningProcess? _process;
     private readonly object _lock = new();
     private HostState _state = HostState.Idle;
@@ -26,15 +28,16 @@ public sealed class SlidevProcessHost : ISlidevProcessHost
     public event EventHandler<HostStateChangedEventArgs>? StateChanged;
 
     public SlidevProcessHost(ILogger<SlidevProcessHost> logger)
-        : this(logger, DefaultProcessFactory) { }
+        : this(logger, DefaultProcessFactory, new SlideDeckBuilder()) { }
 
-    internal SlidevProcessHost(ILogger<SlidevProcessHost> logger, Func<ProcessStartInfo, IRunningProcess> processFactory)
+    internal SlidevProcessHost(ILogger<SlidevProcessHost> logger, Func<ProcessStartInfo, IRunningProcess> processFactory, ISlideDeckBuilder? builder = null)
     {
         _logger = logger;
         _processFactory = processFactory;
+        _builder = builder;
     }
 
-    public Task StartAsync(PresentationProject project, int port, CancellationToken cancellationToken = default)
+    public async Task StartAsync(PresentationProject project, int port, CancellationToken cancellationToken = default)
     {
         lock (_lock)
         {
@@ -48,28 +51,42 @@ public sealed class SlidevProcessHost : ISlidevProcessHost
         ErrorMessage = null;
         TransitionState(HostState.Starting);
 
+        using var startup = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        lock (_lock) { _startupCts = startup; }
         var slidesPath = project.SlidesFilePath ?? Path.Combine(project.Location, "slides.md");
-        var psi = new ProcessStartInfo
-        {
-            FileName = "npx",
-            Arguments = $"slidev \"{slidesPath}\" --port {port}",
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
+        var psi = SlideDeckBuilder.CreateStartInfo("node", project.Location,
+            SlideDeckBuilder.GetCliPath(Path.GetFullPath(project.Location)), Path.GetFullPath(slidesPath), "--port", port.ToString());
 
         IRunningProcess process;
         try
         {
+            if (_builder is not null)
+                await _builder.BuildAsync(project, startup.Token);
+            startup.Token.ThrowIfCancellationRequested();
             process = _processFactory(psi);
+        }
+        catch (OperationCanceledException) when (startup.IsCancellationRequested)
+        {
+            bool isCurrent;
+            lock (_lock) { isCurrent = ReferenceEquals(_startupCts, startup); }
+            if (isCurrent)
+                await StopAsync();
+            return;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to start Slidev process for {Project}.", project.Name);
             ErrorMessage = ex.Message;
             TransitionState(HostState.Error);
-            return Task.CompletedTask;
+            return;
+        }
+        finally
+        {
+            lock (_lock)
+            {
+                if (ReferenceEquals(_startupCts, startup))
+                    _startupCts = null;
+            }
         }
 
         process.OutputDataReceived += OnOutputDataReceived;
@@ -77,7 +94,6 @@ public sealed class SlidevProcessHost : ISlidevProcessHost
 
         lock (_lock) { _process = process; }
 
-        return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken = default)
@@ -85,6 +101,8 @@ public sealed class SlidevProcessHost : ISlidevProcessHost
         IRunningProcess? proc;
         lock (_lock)
         {
+            _startupCts?.Cancel();
+            _startupCts = null;
             proc = _process;
             _process = null;
         }
@@ -170,7 +188,9 @@ public sealed class SlidevProcessHost : ISlidevProcessHost
     {
         var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
         process.Start();
+        process.StandardInput.Close();
         process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
         return new RunningProcessAdapter(process);
     }
 }

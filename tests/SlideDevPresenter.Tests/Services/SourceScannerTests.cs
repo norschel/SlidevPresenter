@@ -134,6 +134,20 @@ public class SourceScannerTests : IDisposable
         Assert.Equal(nested, results[0].Location);
     }
 
+    [Theory]
+    [InlineData("node_modules")]
+    [InlineData(".git")]
+    [InlineData("dist")]
+    public void ScanRoot_DoesNotDiscoverDependencyOrBuildOutputProjects(string excluded)
+    {
+        var project = MakeDir("compiled-project");
+        File.WriteAllText(Path.Combine(project, "slides.md"), "# Talk");
+        var generated = MakeDir("compiled-project", excluded, "nested");
+        File.WriteAllText(Path.Combine(generated, "slides.md"), "# Not a presentation source");
+
+        Assert.Equal(project, Assert.Single(_scanner.ScanRoot(project)).Location);
+    }
+
     [Fact]
     public void ScanRoot_SetsProjectNameToDirectoryName()
     {

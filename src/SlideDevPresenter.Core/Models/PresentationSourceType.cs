@@ -4,5 +4,7 @@ public enum PresentationSourceType
 {
     LocalRoot,
     LocalProject,
-    HostedUrl
+    HostedUrl,
+    Git,
+    GitHub
 }

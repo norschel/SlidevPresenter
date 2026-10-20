@@ -20,6 +20,11 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly IDisplayService _displayService;
     private readonly IDisplaySelector _displaySelector;
     private readonly ISlideDeckPdfExporter _slideDeckPdfExporter;
+    private readonly IGitRepositoryService _gitRepositoryService;
+    public Func<string, Task<bool>> ConfirmRepositoryUpdateAsync { get; set; } = _ => Task.FromResult(false);
+
+    [ObservableProperty]
+    private string? _sourceMessage;
     private readonly SynchronizationContext? _syncContext;
     private CancellationTokenSource? _timerCts;
     private DateTimeOffset? _sessionStartedAt;
@@ -93,6 +98,9 @@ public sealed partial class MainViewModel : ObservableObject
     private string? _errorMessage;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
     private bool _isRefreshing;
 
     [ObservableProperty]
@@ -204,7 +212,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
     }
 
-    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService, IDisplayService displayService, ISlideDeckPdfExporter? slideDeckPdfExporter = null, IDisplaySelector? displaySelector = null)
+    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService, IDisplayService displayService, ISlideDeckPdfExporter? slideDeckPdfExporter = null, IDisplaySelector? displaySelector = null, IGitRepositoryService? gitRepositoryService = null)
     {
         _settingsService = settingsService;
         _sourceScanner = sourceScanner;
@@ -214,6 +222,7 @@ public sealed partial class MainViewModel : ObservableObject
         _displayService = displayService;
         _displaySelector = displaySelector ?? new DefaultDisplaySelector();
         _slideDeckPdfExporter = slideDeckPdfExporter ?? new SlidevPdfExporter();
+        _gitRepositoryService = gitRepositoryService ?? new GitRepositoryService();
         _syncContext = SynchronizationContext.Current;
         _selectedSurfaceMode = ParseSurfaceMode(settingsService.Settings.Defaults.DefaultMode);
 
@@ -258,16 +267,58 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     public async Task RefreshLibraryAsync()
     {
+        if (IsRefreshing)
+            return;
+        if (HostState is HostState.Starting or HostState.Running
+            && _settingsService.Settings.Sources.Any(source => source.IsEnabled && source.Type is PresentationSourceType.Git or PresentationSourceType.GitHub))
+        {
+            SourceMessage = "Stop the presentation before refreshing repository sources or switching branches.";
+            return;
+        }
         IsRefreshing = true;
         try
         {
+            var messages = new List<string>();
+            SourceMessage = "Refreshing sources...";
             var sources = _settingsService.Settings.Sources
                 .Where(s => s.IsEnabled)
                 .ToList();
 
             var projects = new List<PresentationProjectViewModel>();
+            bool? gitAvailable = null;
             foreach (var source in sources)
             {
+                if (source.Type is PresentationSourceType.Git or PresentationSourceType.GitHub)
+                {
+                    gitAvailable ??= await _gitRepositoryService.IsGitAvailableAsync();
+                    if (!gitAvailable.Value)
+                    {
+                        if (!messages.Contains(GitRepositoryService.InstallHint))
+                            messages.Add(GitRepositoryService.InstallHint);
+                        continue;
+                    }
+                    var prepared = await _gitRepositoryService.PrepareAsync(source, ConfirmRepositoryUpdateAsync);
+                    if (prepared.Message is not null)
+                        messages.Add(prepared.Message);
+                    if (prepared.Directory is not null)
+                    {
+                        var scanned = await Task.Run(() => _sourceScanner.ScanRoot(prepared.Directory));
+                        foreach (var project in scanned)
+                        {
+                            projects.Add(new PresentationProjectViewModel(new PresentationProject
+                            {
+                                Id = CreateRepositoryProjectId(source.Id, Path.GetRelativePath(prepared.Directory, project.Location)),
+                                Name = Path.GetFullPath(project.Location) == Path.GetFullPath(prepared.Directory) ? source.Name : $"{source.Name} / {project.Name}",
+                                SourceType = PresentationSourceType.LocalProject,
+                                Location = project.Location,
+                                SlidesFilePath = project.SlidesFilePath
+                            }));
+                        }
+                        if (scanned.Count == 0)
+                            messages.Add($"No Slidev presentations found in {prepared.Directory}. Check the checkout and slides.md, then refresh.");
+                    }
+                    continue;
+                }
                 if (LooksLikeHostedUrl(source.Location))
                 {
                     projects.Add(new PresentationProjectViewModel(new PresentationProject
@@ -321,8 +372,9 @@ public sealed partial class MainViewModel : ObservableObject
                 Projects.Add(project);
 
             SelectedProject = previousSelectionId is not null
-                ? Projects.FirstOrDefault(project => project.Id == previousSelectionId)
+                ? Projects.FirstOrDefault(project => project.Id == previousSelectionId) ?? Projects.FirstOrDefault()
                 : Projects.FirstOrDefault();
+            SourceMessage = messages.Count == 0 ? null : string.Join(Environment.NewLine + Environment.NewLine, messages);
         }
         finally
         {
@@ -330,9 +382,20 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    private static Guid CreateRepositoryProjectId(Guid sourceId, string relativePath)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(sourceId + ":" + relativePath);
+        return new Guid(System.Security.Cryptography.SHA256.HashData(bytes).AsSpan(0, 16));
+    }
+
     [RelayCommand(CanExecute = nameof(CanLaunch))]
     public async Task LaunchAsync()
     {
+        if (IsRefreshing)
+        {
+            SourceMessage = "Wait for the source refresh to finish before starting a presentation.";
+            return;
+        }
         if (SelectedProject is null)
             return;
 
@@ -350,7 +413,7 @@ public sealed partial class MainViewModel : ObservableObject
         await _processHost.StartAsync(SelectedProject.ToModel(), port);
     }
 
-    private bool CanLaunch() => SelectedProject is not null && HostState == HostState.Idle;
+    private bool CanLaunch() => !IsRefreshing && SelectedProject is not null && HostState == HostState.Idle;
 
     [RelayCommand(CanExecute = nameof(CanRemoveSelectedProject))]
     public async Task RemoveSelectedProjectFromLibraryAsync()
@@ -469,7 +532,7 @@ public sealed partial class MainViewModel : ObservableObject
         await StartForSlideAsync(slideNumber, SelectedSurfaceMode);
     }
 
-    private bool CanResume() => IsIdle && SelectedProject is not null && HasLastKnownPosition;
+    private bool CanResume() => !IsRefreshing && IsIdle && SelectedProject is not null && HasLastKnownPosition;
 
     [RelayCommand(CanExecute = nameof(CanRetry))]
     public async Task RetryAsync()
@@ -491,7 +554,7 @@ public sealed partial class MainViewModel : ObservableObject
         await _processHost.StartAsync(SelectedProject.ToModel(), port);
     }
 
-    private bool CanRetry() => SelectedProject is not null && HostState == HostState.Error;
+    private bool CanRetry() => !IsRefreshing && SelectedProject is not null && HostState == HostState.Error;
 
     [RelayCommand]
     public void OpenCurrentSurfaceInBrowser() => TryOpenBrowser(CurrentSurfaceUrl);

@@ -29,6 +29,70 @@ internal sealed class FakeRunningProcess : IRunningProcess
 
 public class SlidevProcessHostTests
 {
+    private sealed class FakeBuilder : ISlideDeckBuilder
+    {
+        public TaskCompletionSource Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task BuildAsync(PresentationProject project, CancellationToken cancellationToken = default) => Completion.Task.WaitAsync(cancellationToken);
+    }
+
+    [Fact]
+    public async Task StartAsync_WaitsForCompilationBeforeStartingServer()
+    {
+        var builder = new FakeBuilder();
+        var processCount = 0;
+        var host = new SlidevProcessHost(NullLogger<SlidevProcessHost>.Instance, _ =>
+        {
+            processCount++;
+            return new FakeRunningProcess();
+        }, builder);
+        var startup = host.StartAsync(MakeProject(), 3030);
+        Assert.Equal(HostState.Starting, host.State);
+        Assert.Equal(0, processCount);
+
+        builder.Completion.SetResult();
+        await startup;
+
+        Assert.Equal(1, processCount);
+    }
+
+    [Fact]
+    public async Task StartAsync_CompilationFailure_DoesNotStartServer()
+    {
+        var builder = new FakeBuilder();
+        var processCount = 0;
+        var host = new SlidevProcessHost(NullLogger<SlidevProcessHost>.Instance, _ =>
+        {
+            processCount++;
+            return new FakeRunningProcess();
+        }, builder);
+        builder.Completion.SetException(new InvalidOperationException("Compilation failed. Fix manually."));
+
+        await host.StartAsync(MakeProject(), 3030);
+
+        Assert.Equal(HostState.Error, host.State);
+        Assert.Contains("Fix manually", host.ErrorMessage);
+        Assert.Equal(0, processCount);
+    }
+
+    [Fact]
+    public async Task StopAsync_DuringCompilation_CancelsStartupWithoutStartingServer()
+    {
+        var builder = new FakeBuilder();
+        var processCount = 0;
+        var host = new SlidevProcessHost(NullLogger<SlidevProcessHost>.Instance, _ =>
+        {
+            processCount++;
+            return new FakeRunningProcess();
+        }, builder);
+        var startup = host.StartAsync(MakeProject(), 3030);
+
+        await host.StopAsync();
+        await startup;
+
+        Assert.Equal(HostState.Idle, host.State);
+        Assert.Equal(0, processCount);
+    }
+
     private static PresentationProject MakeProject() => new()
     {
         Id = Guid.NewGuid(),

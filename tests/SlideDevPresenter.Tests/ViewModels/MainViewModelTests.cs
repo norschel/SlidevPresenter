@@ -153,6 +153,26 @@ internal sealed class FakeSlideDeckPdfExporter : ISlideDeckPdfExporter
     }
 }
 
+internal sealed class FakeGitRepositoryService : IGitRepositoryService
+{
+    public bool Available { get; set; } = true;
+    public RepositoryPreparation Result { get; set; } = new("/tmp/checkout", null);
+    public int PrepareCount { get; private set; }
+    public bool AskForUpdate { get; set; }
+    public bool? UpdateAccepted { get; private set; }
+
+    public Task<bool> IsGitAvailableAsync() => Task.FromResult(Available);
+    public Task<IReadOnlyList<string>> GetBranchesAsync(PresentationSource source) => Task.FromResult<IReadOnlyList<string>>(["main", "release/slides"]);
+
+    public async Task<RepositoryPreparation> PrepareAsync(PresentationSource source, Func<string, Task<bool>> confirmUpdate)
+    {
+        PrepareCount++;
+        if (AskForUpdate)
+            UpdateAccepted = await confirmUpdate("New commits available");
+        return Result;
+    }
+}
+
 public class MainViewModelTests
 {
     private static MainViewModel CreateViewModel(
@@ -163,8 +183,119 @@ public class MainViewModelTests
         FakePresentationWindowService? windowService = null,
         FakeDisplayService? displayService = null,
         FakeSlideDeckPdfExporter? pdfExporter = null,
-        FakeDisplaySelector? displaySelector = null) =>
-        new(settings ?? new(), scanner ?? new(), host ?? new(), reader ?? new(), windowService ?? new(), displayService ?? new(), pdfExporter, displaySelector);
+        FakeDisplaySelector? displaySelector = null,
+        FakeGitRepositoryService? gitService = null) =>
+        new(settings ?? new(), scanner ?? new(), host ?? new(), reader ?? new(), windowService ?? new(), displayService ?? new(), pdfExporter, displaySelector, gitService);
+
+    [Theory]
+    [InlineData(PresentationSourceType.Git)]
+    [InlineData(PresentationSourceType.GitHub)]
+    public async Task RefreshLibrary_RepositoryHttpUrl_PreparesCheckoutInsteadOfHostingWebPage(PresentationSourceType type)
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.Sources.Add(new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Repository slides", Type = type, Location = "https://github.com/owner/slides"
+        });
+        var scanner = new FakeSourceScanner();
+        scanner.Projects.Add(new PresentationProject
+        {
+            Id = Guid.NewGuid(), Name = "checkout", SourceType = PresentationSourceType.LocalProject,
+            Location = "/tmp/checkout", SlidesFilePath = "/tmp/checkout/slides.md"
+        });
+        var git = new FakeGitRepositoryService { AskForUpdate = true };
+        var vm = CreateViewModel(settings, scanner, gitService: git);
+        vm.ConfirmRepositoryUpdateAsync = _ => Task.FromResult(false);
+
+        await vm.RefreshLibraryAsync();
+        var project = Assert.Single(vm.Projects);
+        Assert.Equal(PresentationSourceType.LocalProject, project.SourceType);
+        Assert.Equal("/tmp/checkout", project.Location);
+        Assert.Equal("Repository slides", project.Name);
+        Assert.False(git.UpdateAccepted);
+        var id = project.Id;
+        await vm.RefreshLibraryAsync();
+        Assert.Equal(id, Assert.Single(vm.Projects).Id);
+        Assert.Equal(id, vm.SelectedProject?.Id);
+    }
+
+    [Fact]
+    public async Task RefreshLibrary_MissingGit_SkipsRepositoryButKeepsHostedSources()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.Sources.Add(new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Repository", Type = PresentationSourceType.Git, Location = "https://github.com/owner/slides"
+        });
+        settings.Settings.Sources.Add(new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Hosted", Type = PresentationSourceType.HostedUrl, Location = "http://slides.example.com"
+        });
+        var git = new FakeGitRepositoryService { Available = false };
+        var vm = CreateViewModel(settings, gitService: git);
+
+        await vm.RefreshLibraryAsync();
+
+        Assert.Equal("Hosted", Assert.Single(vm.Projects).Name);
+        Assert.Equal(0, git.PrepareCount);
+        Assert.Contains("Install Git", vm.SourceMessage);
+        Assert.True(settings.Settings.Sources[0].IsEnabled);
+    }
+
+    [Fact]
+    public async Task RefreshLibrary_PendingClone_ShowsInstructionsWithoutLaunchingPresentation()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.Sources.Add(new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Repository", Type = PresentationSourceType.Git, Location = "https://github.com/owner/slides"
+        });
+        var git = new FakeGitRepositoryService { Result = new(null, "Finish cloning in terminal, then refresh.") };
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(settings, host: host, gitService: git);
+
+        await vm.RefreshLibraryAsync();
+
+        Assert.Empty(vm.Projects);
+        Assert.Contains("Finish cloning", vm.SourceMessage);
+        Assert.Equal(0, host.StartCallCount);
+        Assert.False(vm.IsRefreshing);
+    }
+
+    [Theory]
+    [InlineData(HostState.Starting)]
+    [InlineData(HostState.Running)]
+    public async Task RefreshLibrary_ActivePresentation_DoesNotSwitchRepositoryBranch(HostState state)
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.Sources.Add(new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Repository", Type = PresentationSourceType.Git, Location = "https://github.com/owner/slides"
+        });
+        var git = new FakeGitRepositoryService();
+        var vm = CreateViewModel(settings, gitService: git);
+        vm.HostState = state;
+
+        await vm.RefreshLibraryAsync();
+
+        Assert.Equal(0, git.PrepareCount);
+        Assert.Contains("Stop the presentation", vm.SourceMessage);
+    }
+
+    [Fact]
+    public async Task LaunchAsync_RefreshInProgress_DoesNotStartPresentation()
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        vm.IsRefreshing = true;
+
+        await vm.LaunchAsync();
+
+        Assert.False(vm.LaunchCommand.CanExecute(null));
+        Assert.Equal(0, host.StartCallCount);
+        Assert.Contains("Wait for the source refresh", vm.SourceMessage);
+    }
 
     private static PresentationProject MakeProject(string name = "Talk") => new()
     {

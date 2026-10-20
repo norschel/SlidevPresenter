@@ -7,6 +7,33 @@ namespace SlideDevPresenter.Tests.Services;
 
 public sealed class PresentationSourceListSerializerTests
 {
+  [Theory]
+  [InlineData(PresentationSourceType.Git, "ssh://git@example.com/team/slides.git")]
+  [InlineData(PresentationSourceType.Git, "git@github.com:team/slides.git")]
+  [InlineData(PresentationSourceType.GitHub, "team/slides")]
+  public async Task RepositorySource_RoundTripsWithoutLocalCheckoutPath(PresentationSourceType type, string location)
+  {
+    var source = new PresentationSource
+    {
+      Id = Guid.NewGuid(), Name = "Team slides", Type = type, Location = location,
+            CheckoutPath = "/private/local-checkout", RequiresAuthentication = true, IsPublic = false,
+            Branch = "release/slides"
+    };
+    await using var stream = new MemoryStream();
+
+    await PresentationSourceListSerializer.ExportAsync([source], stream);
+    Assert.DoesNotContain("local-checkout", Encoding.UTF8.GetString(stream.ToArray()));
+    stream.Position = 0;
+    var imported = Assert.Single(await PresentationSourceListSerializer.ImportAsync(stream));
+
+    Assert.Equal(type, imported.Type);
+    Assert.Equal(RepositoryLocation.Normalize(location, type), imported.Location);
+    Assert.Null(imported.CheckoutPath);
+    Assert.Equal("release/slides", imported.Branch);
+    Assert.True(imported.RequiresAuthentication);
+    Assert.False(imported.IsPublic);
+  }
+
     [Fact]
     public async Task ExportAsync_ExportsOnlyOnlineSourcesWithoutAuthenticationData()
     {

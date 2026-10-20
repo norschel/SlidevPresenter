@@ -51,7 +51,7 @@ public sealed class SourceScanner : ISourceScanner
                 candidates.Add(expandedPath);
             }
 
-            foreach (var subDir in Directory.EnumerateDirectories(expandedPath, "*", SearchOption.AllDirectories))
+            foreach (var subDir in EnumerateProjectDirectories(expandedPath))
             {
                 if (IsSlidevProject(subDir))
                 {
@@ -80,6 +80,23 @@ public sealed class SourceScanner : ISourceScanner
         }
 
         return results;
+    }
+
+    private static IEnumerable<string> EnumerateProjectDirectories(string root)
+    {
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.TryPop(out var current))
+        {
+            foreach (var directory in Directory.EnumerateDirectories(current))
+            {
+                if (Path.GetFileName(directory) is "node_modules" or ".git" or "dist" or ".yarn" or ".slidev"
+                    || (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+                    continue;
+                yield return directory;
+                pending.Push(directory);
+            }
+        }
     }
 
     public bool IsSlidevProject(string directoryPath)

@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using SlideDevPresenter.App.Services;
 using SlideDevPresenter.Core.Models;
 using SlideDevPresenter.Core.Services;
+using SlideDevPresenter.Infrastructure.Services;
 
 namespace SlideDevPresenter.App.ViewModels;
 
@@ -12,9 +13,20 @@ public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly ISettingsService _settingsService;
     private readonly IThemeService _themeService;
+    private readonly IGitRepositoryService _gitRepositoryService;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(AddGitSourceCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AddGitHubSourceCommand))]
+    [NotifyCanExecuteChangedFor(nameof(LoadBranchesCommand))]
+    private bool _isGitAvailable;
+
+    [ObservableProperty]
+    private string? _sourceMessage;
 
     public ObservableCollection<SourceViewModel> Sources { get; } = [];
-    public IReadOnlyList<PresentationSourceType> AvailableSourceTypes { get; } = Enum.GetValues<PresentationSourceType>();
+    public ObservableCollection<string> Branches { get; } = [];
+    public IReadOnlyList<string> AvailableSourceTypes { get; } = ["Local", nameof(PresentationSourceType.HostedUrl), nameof(PresentationSourceType.Git), nameof(PresentationSourceType.GitHub)];
     public IReadOnlyList<string> AvailableModes { get; } = Enum.GetNames<PresentationSurfaceMode>();
     public IReadOnlyList<string> AvailableThemes { get; } = ["System", "Light", "Dark"];
 
@@ -91,18 +103,47 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
     }
 
-    public SettingsViewModel(ISettingsService settingsService, IThemeService themeService)
+    public SettingsViewModel(ISettingsService settingsService, IThemeService themeService, IGitRepositoryService? gitRepositoryService = null)
     {
         _settingsService = settingsService;
         _themeService = themeService;
+        _gitRepositoryService = gitRepositoryService ?? new GitRepositoryService();
         LoadFromSettings(settingsService.Settings);
+    }
+
+    public async Task CheckGitAvailabilityAsync()
+    {
+        IsGitAvailable = await _gitRepositoryService.IsGitAvailableAsync();
+        SourceMessage = IsGitAvailable ? null : GitRepositoryService.InstallHint;
+        foreach (var source in Sources)
+            source.IsGitAvailable = IsGitAvailable;
+    }
+
+    partial void OnSelectedSourceChanged(SourceViewModel? value) => Branches.Clear();
+
+    [RelayCommand(CanExecute = nameof(IsGitAvailable))]
+    private async Task LoadBranchesAsync()
+    {
+        Branches.Clear();
+        if (SelectedSource?.IsRepository != true)
+            return;
+        try
+        {
+            foreach (var branch in await _gitRepositoryService.GetBranchesAsync(SelectedSource.ToModel()))
+                Branches.Add(branch);
+            SourceMessage = Branches.Count == 0 ? "No cached branches found. Enter a branch name, or clone and refresh the repository first." : null;
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            SourceMessage = exception.Message;
+        }
     }
 
     private void LoadFromSettings(AppSettings settings)
     {
         Sources.Clear();
         foreach (var source in settings.Sources)
-            Sources.Add(new SourceViewModel(source));
+            Sources.Add(new SourceViewModel(source) { IsGitAvailable = IsGitAvailable });
 
         DefaultPort = settings.Defaults.DefaultPort;
         AutoIncrementPorts = settings.Defaults.AutoIncrementPorts;
@@ -130,33 +171,19 @@ public sealed partial class SettingsViewModel : ObservableObject
         OpenExternalLinksInEmbeddedBrowser = settings.Navigation.OpenExternalLinksInEmbeddedBrowser;
     }
 
-    [RelayCommand]
-    private void AddLocalRootSource()
+    public void AddLocalSource(string folderPath)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(folderPath);
         var source = new PresentationSource
         {
             Id = Guid.NewGuid(),
-            Name = "New Local Root",
+            Name = Path.GetFileName(Path.TrimEndingDirectorySeparator(folderPath)),
             Type = PresentationSourceType.LocalRoot,
-            Location = "",
+            Location = folderPath,
             IsEnabled = true
         };
-        var vm = new SourceViewModel(source);
-        Sources.Add(vm);
-        SelectedSource = vm;
-    }
-
-    [RelayCommand]
-    private void AddLocalProjectSource()
-    {
-        var source = new PresentationSource
-        {
-            Id = Guid.NewGuid(),
-            Name = "New Local Project",
-            Type = PresentationSourceType.LocalProject,
-            Location = "",
-            IsEnabled = true
-        };
+        if (string.IsNullOrEmpty(source.Name))
+            source.Name = folderPath;
         var vm = new SourceViewModel(source);
         Sources.Add(vm);
         SelectedSource = vm;
@@ -176,6 +203,27 @@ public sealed partial class SettingsViewModel : ObservableObject
         var vm = new SourceViewModel(source);
         Sources.Add(vm);
         SelectedSource = vm;
+    }
+
+    [RelayCommand(CanExecute = nameof(IsGitAvailable))]
+    private void AddGitSource() => AddRepositorySource(PresentationSourceType.Git);
+
+    [RelayCommand(CanExecute = nameof(IsGitAvailable))]
+    private void AddGitHubSource() => AddRepositorySource(PresentationSourceType.GitHub);
+
+    private void AddRepositorySource(PresentationSourceType type)
+    {
+        if (!IsGitAvailable)
+            return;
+        var source = new SourceViewModel(new PresentationSource
+        {
+            Id = Guid.NewGuid(),
+            Name = type == PresentationSourceType.GitHub ? "New GitHub Presentation" : "New Git Presentation",
+            Type = type,
+            Location = type == PresentationSourceType.GitHub ? "owner/repository" : "https://"
+        }) { IsGitAvailable = IsGitAvailable };
+        Sources.Add(source);
+        SelectedSource = source;
     }
 
     [RelayCommand]
@@ -199,6 +247,34 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveAsync()
     {
+        foreach (var source in Sources)
+        {
+            if (string.IsNullOrWhiteSpace(source.Name) || string.IsNullOrWhiteSpace(source.Location))
+            {
+                SourceMessage = "Each source needs a name and a location.";
+                return;
+            }
+            if (source.IsLocal && File.Exists(SourceScanner.ExpandHomePath(source.Location.Trim())))
+            {
+                SourceMessage = $"{source.Name}: Select a local folder, not a file.";
+                return;
+            }
+            if (source.IsRepository)
+            {
+                try { GitRepositoryService.NormalizeRemote(source.Location, source.Type); }
+                catch (ArgumentException exception)
+                {
+                    SourceMessage = $"{source.Name}: {exception.Message}";
+                    return;
+                }
+            }
+            else if (source.Type == PresentationSourceType.HostedUrl
+                && (!Uri.TryCreate(source.Location, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")))
+            {
+                SourceMessage = $"{source.Name}: Use a valid HTTP or HTTPS presentation URL.";
+                return;
+            }
+        }
         var settings = _settingsService.Settings;
         settings.Sources = Sources.Select(s => s.ToModel()).ToList();
         settings.Defaults.DefaultPort = DefaultPort;
@@ -225,6 +301,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         await _settingsService.SaveAsync();
         _themeService.ApplyTheme(Theme);
+        ConfigurationMessage = "Settings saved.";
     }
 
     public async Task ExportConfigurationAsync(Stream destination)
@@ -288,7 +365,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             var importedSources = await PresentationSourceListSerializer.ImportAsync(source);
             foreach (var importedSource in importedSources)
-                Sources.Add(new SourceViewModel(importedSource));
+                Sources.Add(new SourceViewModel(importedSource) { IsGitAvailable = IsGitAvailable });
             ConfigurationMessage = "Source list imported.";
         }
         catch (IOException ex)

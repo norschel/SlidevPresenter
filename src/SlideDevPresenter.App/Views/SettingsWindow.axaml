@@ -18,7 +18,7 @@
         <TabControl Grid.Row="0">
             <TabItem Header="Sources">
                 <Grid ColumnDefinitions="260,*" Margin="8">
-                    <Grid Grid.Column="0" RowDefinitions="*,Auto,Auto">
+                    <Grid Grid.Column="0" RowDefinitions="*,Auto,Auto,Auto">
                         <ListBox Grid.Row="0"
                                  ItemsSource="{Binding Sources}"
                                  SelectedItem="{Binding SelectedSource}">
@@ -27,37 +27,54 @@
                                     <StackPanel Spacing="2">
                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
                                         <TextBlock Text="{Binding Location}" FontSize="11" Opacity="0.6" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="Git unavailable" FontSize="11" IsVisible="{Binding !CanEnable}"/>
                                     </StackPanel>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
-                            <Button Content="+ Root" Command="{Binding AddLocalRootSourceCommand}" ToolTip.Tip="Add local root folder"/>
-                            <Button Content="+ Project" Command="{Binding AddLocalProjectSourceCommand}" ToolTip.Tip="Add local project"/>
+                        <WrapPanel Grid.Row="1" Margin="0,8,0,0">
+                            <Button Content="+ Local" Click="AddLocalSource_Click" ToolTip.Tip="Add a local folder"/>
                             <Button Content="+ URL" Command="{Binding AddHostedUrlSourceCommand}" ToolTip.Tip="Add hosted URL"/>
+                            <Button Content="+ Git" Command="{Binding AddGitSourceCommand}" ToolTip.Tip="Add a Git repository"/>
+                            <Button Content="+ GitHub" Command="{Binding AddGitHubSourceCommand}" ToolTip.Tip="Add a GitHub repository"/>
                             <Button Content="Remove" Command="{Binding RemoveSelectedSourceCommand}" ToolTip.Tip="Remove selected source"/>
-                        </StackPanel>
+                        </WrapPanel>
                         <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="4" Margin="0,4,0,0">
                             <Button Content="Import list..." Click="ImportSourceList_Click"/>
                             <Button Content="Export list..." Click="ExportSourceList_Click"/>
                         </StackPanel>
+                        <ScrollViewer Grid.Row="3" MaxHeight="140" Margin="0,8,0,0">
+                            <TextBlock Text="{Binding SourceMessage}" TextWrapping="Wrap"/>
+                        </ScrollViewer>
                     </Grid>
 
                     <Grid Grid.Column="1" Margin="12,0,0,0"
                           IsVisible="{Binding SelectedSource, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                                <ScrollViewer>
                         <StackPanel Spacing="8">
                             <TextBlock Text="Name"/>
                             <TextBox Text="{Binding SelectedSource.Name}"/>
                             <TextBlock Text="Type"/>
-                            <ComboBox ItemsSource="{Binding AvailableSourceTypes}" SelectedItem="{Binding SelectedSource.Type}"/>
+                            <ComboBox ItemsSource="{Binding AvailableSourceTypes}" SelectedItem="{Binding SelectedSource.TypeName}"/>
                             <TextBlock Text="Location"/>
-                            <TextBox Text="{Binding SelectedSource.Location}"/>
-                            <CheckBox Content="Enabled" IsChecked="{Binding SelectedSource.IsEnabled}"/>
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                                <TextBox Text="{Binding SelectedSource.Location}" IsReadOnly="{Binding SelectedSource.IsLocal}"/>
+                                <Button Grid.Column="1" Click="BrowseLocalFolder_Click" IsVisible="{Binding SelectedSource.IsLocal}" ToolTip.Tip="Browse for a local folder" AutomationProperties.Name="Browse for a local folder">
+                                    <PathIcon Width="16" Height="16" Data="M 1,3 L 7,3 L 9,5 L 19,5 L 19,17 L 1,17 Z"/>
+                                </Button>
+                            </Grid>
+                            <CheckBox Content="Enabled" IsChecked="{Binding SelectedSource.IsEnabled}" IsEnabled="{Binding SelectedSource.CanEnable}"/>
+                            <TextBlock Text="Checkout folder (optional)" IsVisible="{Binding SelectedSource.IsRepository}"/>
+                            <TextBox Text="{Binding SelectedSource.CheckoutPath}" IsVisible="{Binding SelectedSource.IsRepository}"/>
+                            <TextBlock Text="Branch (optional)" IsVisible="{Binding SelectedSource.IsRepository}"/>
+                            <AutoCompleteBox Text="{Binding SelectedSource.Branch, Mode=TwoWay}" ItemsSource="{Binding Branches}" IsVisible="{Binding SelectedSource.IsRepository}" IsEnabled="{Binding SelectedSource.CanEnable}"/>
+                            <Button Content="Load branches" Command="{Binding LoadBranchesCommand}" IsVisible="{Binding SelectedSource.IsRepository}"/>
                             <TextBlock Text="Comment"/>
                             <TextBox Text="{Binding SelectedSource.Comment}"/>
-                            <CheckBox Content="Public" IsChecked="{Binding SelectedSource.IsPublic}"/>
-                            <CheckBox Content="Authentication required" IsChecked="{Binding SelectedSource.RequiresAuthentication}"/>
+                            <CheckBox Content="Public" IsChecked="{Binding SelectedSource.IsPublic}" IsVisible="{Binding !SelectedSource.IsLocal}"/>
+                            <CheckBox Content="Authentication required" IsChecked="{Binding SelectedSource.RequiresAuthentication}" IsVisible="{Binding !SelectedSource.IsLocal}"/>
                         </StackPanel>
+                        </ScrollViewer>
                     </Grid>
                 </Grid>
             </TabItem>
