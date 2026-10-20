@@ -346,7 +346,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
 
         IsExportingPdf = true;
-        PdfExportMessage = null;
+        PdfExportMessage = "Exporting PDF...";
         try
         {
             await _slideDeckPdfExporter.ExportPdfAsync(SelectedProject.ToModel(), outputPath);

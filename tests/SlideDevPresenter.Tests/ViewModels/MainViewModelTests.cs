@@ -126,12 +126,13 @@ internal sealed class FakeSlideDeckPdfExporter : ISlideDeckPdfExporter
     public PresentationProject? ExportedProject { get; private set; }
     public string? OutputPath { get; private set; }
     public Exception? ExceptionToThrow { get; set; }
+    public Task? ExportTask { get; set; }
 
     public Task ExportPdfAsync(PresentationProject project, string outputPath, CancellationToken cancellationToken = default)
     {
         ExportedProject = project;
         OutputPath = outputPath;
-        return ExceptionToThrow is null ? Task.CompletedTask : Task.FromException(ExceptionToThrow);
+        return ExportTask ?? (ExceptionToThrow is null ? Task.CompletedTask : Task.FromException(ExceptionToThrow));
     }
 }
 
@@ -183,6 +184,24 @@ public class MainViewModelTests
         Assert.Equal("/tmp/talk.pdf", pdfExporter.OutputPath);
         Assert.Equal("PDF exported to talk.pdf.", vm.PdfExportMessage);
         Assert.False(vm.IsExportingPdf);
+    }
+
+    [Fact]
+    public async Task ExportPdf_ShowsProgressMessageWhileExporterIsRunning()
+    {
+        var exportCompletion = new TaskCompletionSource();
+        var pdfExporter = new FakeSlideDeckPdfExporter { ExportTask = exportCompletion.Task };
+        var vm = CreateViewModel(pdfExporter: pdfExporter);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+
+        var exportTask = vm.ExportPdfAsync("/tmp/talk.pdf");
+
+        Assert.True(vm.IsExportingPdf);
+        Assert.Equal("Exporting PDF...", vm.PdfExportMessage);
+
+        exportCompletion.SetResult();
+        await exportTask;
+        Assert.Equal("PDF exported to talk.pdf.", vm.PdfExportMessage);
     }
 
     [Fact]

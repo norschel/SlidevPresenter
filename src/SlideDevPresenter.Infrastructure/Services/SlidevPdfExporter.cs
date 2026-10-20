@@ -31,16 +31,22 @@ public sealed class SlidevPdfExporter : ISlideDeckPdfExporter
         if (string.IsNullOrWhiteSpace(outputPath))
             throw new ArgumentException("An output path is required.", nameof(outputPath));
 
-        var slidesPath = project.SlidesFilePath ?? Path.Combine(project.Location, "slides.md");
+        var slidesPath = Path.GetFullPath(project.SlidesFilePath ?? Path.Combine(project.Location, "slides.md"));
         var startInfo = new ProcessStartInfo
         {
-            FileName = "npx",
+            FileName = OperatingSystem.IsWindows() ? "cmd.exe" : "npx",
             WorkingDirectory = project.Location,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true
         };
+        if (OperatingSystem.IsWindows())
+        {
+            startInfo.ArgumentList.Add("/d");
+            startInfo.ArgumentList.Add("/c");
+            startInfo.ArgumentList.Add("npx.cmd");
+        }
         startInfo.ArgumentList.Add("slidev");
         startInfo.ArgumentList.Add("export");
         startInfo.ArgumentList.Add(slidesPath);
