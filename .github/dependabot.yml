@@ -13,3 +13,6 @@ updates:
       avalonia:
         patterns:
           - "Avalonia*"
+      MsExtLogging:
+        patterns:
+          - "Microsoft.Extensions.Logging.*"
