@@ -1,0 +1,27 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="using:SlideDevPresenter.Core.Models"
+        x:Class="SlideDevPresenter.App.Views.DisplaySelectionWindow"
+        Width="460"
+        SizeToContent="Height"
+        CanResize="False"
+        Icon="/Assets/appicon.ico"
+        Title="Choose presentation display"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="16" Spacing="12">
+        <TextBlock Text="Multiple displays detected. Which display should show the participant view?" TextWrapping="Wrap"/>
+
+        <ListBox x:Name="DisplayList" MaxHeight="260">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="models:DisplayInfo">
+                    <TextBlock Text="{Binding DisplayLabel}" Margin="0,4"/>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="Don't open participant view" Click="Cancel_Click"/>
+            <Button x:Name="OkButton" Content="Use this display" Click="Ok_Click" IsDefault="True"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

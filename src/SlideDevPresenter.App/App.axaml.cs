@@ -37,7 +37,7 @@ public partial class App : Application
 
             Dispatcher.UIThread.UnhandledException += OnUiThreadUnhandledException;
 
-            _mainViewModel = new MainViewModel(_settingsService, sourceScanner, processHost, slideDeckMetadataReader, presentationWindowService, displayService);
+            _mainViewModel = new MainViewModel(_settingsService, sourceScanner, processHost, slideDeckMetadataReader, presentationWindowService, displayService, displaySelector: new AvaloniaDisplaySelector());
             _mainWindow = new MainWindow(_mainViewModel, shortcutService, themeService);
 
             presentationWindowService.PresentationExited += (_, _) => _mainWindow.Activate();

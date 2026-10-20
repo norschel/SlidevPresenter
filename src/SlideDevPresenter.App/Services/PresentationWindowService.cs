@@ -1,6 +1,9 @@
 using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using SlideDevPresenter.App.Views;
+using SlideDevPresenter.Core.Models;
 using SlideDevPresenter.Core.Services;
 
 namespace SlideDevPresenter.App.Services;
@@ -20,9 +23,9 @@ public sealed class PresentationWindowService : IPresentationWindowService
         _settingsService = settingsService;
     }
 
-    public Task OpenAsync(string participantUrl, string? presenterUrl, CancellationToken cancellationToken = default)
+    public Task OpenAsync(string participantUrl, string? presenterUrl, DisplayInfo? targetDisplay = null, CancellationToken cancellationToken = default)
     {
-        Dispatcher.UIThread.Post(() => OpenOnUiThread(participantUrl));
+        Dispatcher.UIThread.Post(() => OpenOnUiThread(participantUrl, targetDisplay));
         return Task.CompletedTask;
     }
 
@@ -32,30 +35,69 @@ public sealed class PresentationWindowService : IPresentationWindowService
         return Task.CompletedTask;
     }
 
-    private void OpenOnUiThread(string participantUrl)
+    private void OpenOnUiThread(string participantUrl, DisplayInfo? targetDisplay)
     {
         CloseOnUiThread();
 
         var settings = _settingsService.Settings.DisplayManagement;
-        var displays = _displayService.GetDisplays();
 
         _participantWindow = new ParticipantWindow(participantUrl);
         _participantWindow.PresentationExited += OnParticipantWindowExited;
         _participantWindow.ExternalLinkNavigated += OnParticipantWindowExternalLinkNavigated;
         _participantWindow.Closed += OnParticipantWindowClosed;
 
-        // On multi-display setups move the participant window to the secondary display before showing
-        if (displays.Count >= 2 && settings.AutoDetectDisplays)
+        var display = targetDisplay ?? PickDefaultDisplay(settings);
+        if (display is not null)
         {
-            // Prefer the first non-primary display; if all report as primary fall back to index 1.
-            var secondary = displays.FirstOrDefault(d => !d.IsPrimary) ?? displays[1];
-            _participantWindow.Position = new PixelPoint(secondary.X + 10, secondary.Y + 10);
+            MoveMainWindowOffDisplay(display);
+            _participantWindow.Position = new PixelPoint(display.X + 10, display.Y + 10);
         }
 
         _participantWindow.Show();
 
         if (settings.FullscreenParticipantView)
             _participantWindow.SetFullscreen();
+    }
+
+    /// <summary>If the main window sits on the display the participant view is about to take over, relocate it.</summary>
+    private void MoveMainWindowOffDisplay(DisplayInfo occupied)
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } mainWindow })
+            return;
+
+        var currentScreen = mainWindow.Screens.ScreenFromWindow(mainWindow);
+        if (currentScreen is null)
+            return;
+
+        var bounds = currentScreen.Bounds;
+        if (!DisplayPlacement.Matches(occupied, bounds.X, bounds.Y, bounds.Width, bounds.Height))
+            return;
+
+        var alternate = DisplayPlacement.PickAlternateDisplay(_displayService.GetDisplays(), occupied);
+        if (alternate is null)
+            return;
+
+        // A maximized/fullscreen window cannot be repositioned; normalize, move, then restore the state.
+        var previousState = mainWindow.WindowState;
+        if (previousState != WindowState.Normal)
+            mainWindow.WindowState = WindowState.Normal;
+
+        mainWindow.Position = new PixelPoint(alternate.X + 40, alternate.Y + 40);
+
+        if (previousState is WindowState.Maximized or WindowState.FullScreen)
+            mainWindow.WindowState = previousState;
+    }
+
+    private DisplayInfo? PickDefaultDisplay(DisplayManagementSettings settings)
+    {
+        var displays = _displayService.GetDisplays();
+
+        // On multi-display setups move the participant window to the secondary display before showing
+        if (displays.Count < 2 || !settings.AutoDetectDisplays)
+            return null;
+
+        // Prefer the first non-primary display; if all report as primary fall back to index 1.
+        return displays.FirstOrDefault(d => !d.IsPrimary) ?? displays[1];
     }
 
     private void CloseOnUiThread()

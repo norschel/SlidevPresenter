@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using SlideDevPresenter.App.Services;
@@ -99,6 +100,71 @@ public partial class MainWindow : Window
         {
             _viewModel.PdfExportMessage = $"PDF export failed: {exception.Message}";
         }
+    }
+
+    private async void ExportLibrary_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel is null)
+            return;
+
+        try
+        {
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Export library",
+                SuggestedFileName = "SlideDevPresenter-library.json",
+                DefaultExtension = "json",
+                FileTypeChoices = [new FilePickerFileType("JSON") { Patterns = ["*.json"] }]
+            });
+            if (file is null)
+                return;
+
+            await using var stream = await file.OpenWriteAsync();
+            if (stream.CanSeek)
+            {
+                stream.SetLength(0);
+                stream.Position = 0;
+            }
+            await _viewModel.ExportLibraryAsync(stream);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            _viewModel.LibraryMessage = $"Library export failed: {exception.Message}";
+        }
+    }
+
+    private async void ImportLibrary_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel is null)
+            return;
+
+        try
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Import library",
+                AllowMultiple = false,
+                FileTypeFilter = [new FilePickerFileType("JSON") { Patterns = ["*.json"] }]
+            });
+            if (files.Count == 0)
+                return;
+
+            await using var stream = await files[0].OpenReadAsync();
+            await _viewModel.ImportLibraryAsync(stream);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            _viewModel.LibraryMessage = $"Library import failed: {exception.Message}";
+        }
+    }
+
+    private async void CopyProjectLocation_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel?.SelectedProject is null || Clipboard is null)
+            return;
+
+        await Clipboard.SetTextAsync(_viewModel.SelectedProject.Location);
+        _viewModel.LibraryMessage = "Location copied to clipboard.";
     }
 
     private void ConfigureEmbeddedWebView()

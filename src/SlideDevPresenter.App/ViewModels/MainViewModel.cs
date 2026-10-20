@@ -18,6 +18,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly ISlideDeckMetadataReader _slideDeckMetadataReader;
     private readonly IPresentationWindowService _presentationWindowService;
     private readonly IDisplayService _displayService;
+    private readonly IDisplaySelector _displaySelector;
     private readonly ISlideDeckPdfExporter _slideDeckPdfExporter;
     private readonly SynchronizationContext? _syncContext;
     private CancellationTokenSource? _timerCts;
@@ -28,6 +29,8 @@ public sealed partial class MainViewModel : ObservableObject
     private int? _pendingSlideNavigation;
     private string? _lastKnownParticipantUrl;
     private string? _lastKnownPresenterUrl;
+    // Resolved once per running session so the display question is asked at most once per start.
+    private Task<ParticipantPlacement>? _sessionPlacement;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
@@ -38,9 +41,12 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanExportPdf))]
+    [NotifyPropertyChangedFor(nameof(CanRemoveSelectedProject))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
     [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RemoveSelectedProjectFromLibraryCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenSelectedProjectLocationCommand))]
     private PresentationProjectViewModel? _selectedProject;
 
     [ObservableProperty]
@@ -49,6 +55,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private string? _pdfExportMessage;
+
+    [ObservableProperty]
+    private string? _libraryMessage;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
@@ -169,6 +178,8 @@ public sealed partial class MainViewModel : ObservableObject
     public bool ShowStatusBar => _settingsService.Settings.Appearance.ShowStatusBar;
     public bool HasSlides => Slides.Count > 0;
     public bool CanExportPdf => SelectedProject?.SourceType == PresentationSourceType.LocalProject && !IsExportingPdf;
+    /// <summary>Only projects that map 1:1 to a configured source can be removed; root-scanned projects are managed via their root source.</summary>
+    public bool CanRemoveSelectedProject => SelectedProject is not null && _settingsService.Settings.Sources.Any(s => s.Id == SelectedProject.Id);
     public int SlideCount => Slides.Count;
     public string ElapsedPresentationTimeText => ElapsedPresentationTime.ToString(@"hh\:mm\:ss");
     public string SelectedSlideSummary => SelectedOutlineSlide?.Summary ?? "Select a slide to inspect its summary.";
@@ -193,7 +204,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
     }
 
-    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService, IDisplayService displayService, ISlideDeckPdfExporter? slideDeckPdfExporter = null)
+    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService, IDisplayService displayService, ISlideDeckPdfExporter? slideDeckPdfExporter = null, IDisplaySelector? displaySelector = null)
     {
         _settingsService = settingsService;
         _sourceScanner = sourceScanner;
@@ -201,6 +212,7 @@ public sealed partial class MainViewModel : ObservableObject
         _slideDeckMetadataReader = slideDeckMetadataReader;
         _presentationWindowService = presentationWindowService;
         _displayService = displayService;
+        _displaySelector = displaySelector ?? new DefaultDisplaySelector();
         _slideDeckPdfExporter = slideDeckPdfExporter ?? new SlidevPdfExporter();
         _syncContext = SynchronizationContext.Current;
         _selectedSurfaceMode = ParseSurfaceMode(settingsService.Settings.Defaults.DefaultMode);
@@ -339,6 +351,60 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     private bool CanLaunch() => SelectedProject is not null && HostState == HostState.Idle;
+
+    [RelayCommand(CanExecute = nameof(CanRemoveSelectedProject))]
+    public async Task RemoveSelectedProjectFromLibraryAsync()
+    {
+        if (SelectedProject is null)
+            return;
+
+        var name = SelectedProject.Name;
+        if (_settingsService.Settings.Sources.RemoveAll(s => s.Id == SelectedProject.Id) == 0)
+            return;
+
+        await _settingsService.SaveAsync();
+        LibraryMessage = $"Removed \"{name}\" from the library.";
+        await RefreshLibraryAsync();
+    }
+
+    [RelayCommand(CanExecute = nameof(HasSelectedProject))]
+    public void OpenSelectedProjectLocation()
+    {
+        if (SelectedProject is not null)
+            TryOpenBrowser(SelectedProject.Location);
+    }
+
+    private bool HasSelectedProject() => SelectedProject is not null;
+
+    public async Task ExportLibraryAsync(Stream destination)
+    {
+        await PresentationSourceListSerializer.ExportAsync(_settingsService.Settings.Sources, destination);
+        LibraryMessage = "Library exported.";
+    }
+
+    public async Task ImportLibraryAsync(Stream source)
+    {
+        var imported = await PresentationSourceListSerializer.ImportAsync(source);
+        var sources = _settingsService.Settings.Sources;
+        var added = 0;
+        foreach (var candidate in imported)
+        {
+            if (sources.Any(existing => string.Equals(existing.Location, candidate.Location, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            sources.Add(candidate);
+            added++;
+        }
+
+        if (added > 0)
+            await _settingsService.SaveAsync();
+
+        var skipped = imported.Count - added;
+        LibraryMessage = skipped > 0
+            ? $"Imported {added} source(s), skipped {skipped} already in the library."
+            : $"Imported {added} source(s).";
+        await RefreshLibraryAsync();
+    }
 
     public async Task ExportPdfAsync(string outputPath)
     {
@@ -613,22 +679,46 @@ public sealed partial class MainViewModel : ObservableObject
         {
             StartSessionTimer();
             if (ShouldOpenParticipantWindow(participantUrl))
-                _ = _presentationWindowService.OpenAsync(participantUrl!, presenterUrl);
+                _ = OpenParticipantWindowAsync(participantUrl!, presenterUrl);
             else
                 AutoOpenConfiguredViews();
         }
         else if (state == HostState.Idle)
         {
             _hasAutoOpenedForCurrentRun = false;
+            _sessionPlacement = null;
             _ = _presentationWindowService.CloseAsync();
             StopSessionTimer(resetElapsedOnIdle);
             ClearBrowserWorkspace();
         }
         else if (state == HostState.Error)
         {
+            _sessionPlacement = null;
             _ = _presentationWindowService.CloseAsync();
             StopSessionTimer(resetElapsed: false);
         }
+    }
+
+    private async Task OpenParticipantWindowAsync(string participantUrl, string? presenterUrl)
+    {
+        var placementTask = _sessionPlacement ??= ResolveParticipantPlacementAsync();
+        var placement = await placementTask;
+
+        // The user may have stopped the session (or started a new one) while the dialog was open.
+        if (!placement.ShouldOpen || HostState != HostState.Running || !ReferenceEquals(placementTask, _sessionPlacement))
+            return;
+
+        await _presentationWindowService.OpenAsync(participantUrl, presenterUrl, placement.Display);
+    }
+
+    private async Task<ParticipantPlacement> ResolveParticipantPlacementAsync()
+    {
+        var displays = _displayService.GetDisplays();
+        if (displays.Count < 2)
+            return new ParticipantPlacement(true, null);
+
+        var display = await _displaySelector.SelectDisplayAsync(displays);
+        return new ParticipantPlacement(display is not null, display);
     }
 
     private void SaveLastKnownPosition()
@@ -786,7 +876,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         var participantUrl = ParticipantUrl;
         if (ShouldOpenParticipantWindow(participantUrl))
-            _ = _presentationWindowService.OpenAsync(participantUrl!, PresenterUrl);
+            _ = OpenParticipantWindowAsync(participantUrl!, PresenterUrl);
     }
 
     private bool ShouldOpenParticipantWindow(string? participantUrl) =>
@@ -826,6 +916,8 @@ public sealed partial class MainViewModel : ObservableObject
             ? PresentationSurfaceMode.Participant
             : PresentationSurfaceMode.Presenter;
 
+    private readonly record struct ParticipantPlacement(bool ShouldOpen, DisplayInfo? Display);
+
     private sealed class NullSlideDeckMetadataReader : ISlideDeckMetadataReader
     {
         public Task<SlideDeckMetadata> ReadAsync(PresentationProject project, CancellationToken cancellationToken = default) =>
@@ -838,12 +930,19 @@ public sealed partial class MainViewModel : ObservableObject
         public event EventHandler? PresentationExited;
         public event EventHandler<Uri>? ExternalLinkNavigated;
 #pragma warning restore CS0067
-        public Task OpenAsync(string participantUrl, string? presenterUrl, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task OpenAsync(string participantUrl, string? presenterUrl, DisplayInfo? targetDisplay = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task CloseAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class NullDisplayService : IDisplayService
     {
         public IReadOnlyList<DisplayInfo> GetDisplays() => [];
+    }
+
+    /// <summary>Headless fallback: behaves like the pre-dialog logic by preferring the first non-primary display.</summary>
+    private sealed class DefaultDisplaySelector : IDisplaySelector
+    {
+        public Task<DisplayInfo?> SelectDisplayAsync(IReadOnlyList<DisplayInfo> displays, CancellationToken cancellationToken = default) =>
+            Task.FromResult<DisplayInfo?>(displays.FirstOrDefault(d => !d.IsPrimary) ?? displays.FirstOrDefault());
     }
 }

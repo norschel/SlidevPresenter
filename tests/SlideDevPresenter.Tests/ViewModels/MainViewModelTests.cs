@@ -91,17 +91,19 @@ internal sealed class FakePresentationWindowService : IPresentationWindowService
     public int CloseCallCount { get; private set; }
     public string? LastParticipantUrl { get; private set; }
     public string? LastPresenterUrl { get; private set; }
+    public DisplayInfo? LastTargetDisplay { get; private set; }
 
 #pragma warning disable CS0067
     public event EventHandler? PresentationExited;
     public event EventHandler<Uri>? ExternalLinkNavigated;
 #pragma warning restore CS0067
 
-    public Task OpenAsync(string participantUrl, string? presenterUrl, CancellationToken cancellationToken = default)
+    public Task OpenAsync(string participantUrl, string? presenterUrl, DisplayInfo? targetDisplay = null, CancellationToken cancellationToken = default)
     {
         OpenCallCount++;
         LastParticipantUrl = participantUrl;
         LastPresenterUrl = presenterUrl;
+        LastTargetDisplay = targetDisplay;
         return Task.CompletedTask;
     }
 
@@ -119,6 +121,21 @@ internal sealed class FakeDisplayService : IDisplayService
 {
     public List<DisplayInfo> Displays { get; } = [];
     public IReadOnlyList<DisplayInfo> GetDisplays() => Displays.AsReadOnly();
+}
+
+internal sealed class FakeDisplaySelector : IDisplaySelector
+{
+    public int CallCount { get; private set; }
+    public IReadOnlyList<DisplayInfo>? OfferedDisplays { get; private set; }
+    public DisplayInfo? Result { get; set; }
+    public TaskCompletionSource<DisplayInfo?>? PendingResult { get; set; }
+
+    public Task<DisplayInfo?> SelectDisplayAsync(IReadOnlyList<DisplayInfo> displays, CancellationToken cancellationToken = default)
+    {
+        CallCount++;
+        OfferedDisplays = displays;
+        return PendingResult?.Task ?? Task.FromResult(Result);
+    }
 }
 
 internal sealed class FakeSlideDeckPdfExporter : ISlideDeckPdfExporter
@@ -145,8 +162,9 @@ public class MainViewModelTests
         FakeSlideDeckMetadataReader? reader = null,
         FakePresentationWindowService? windowService = null,
         FakeDisplayService? displayService = null,
-        FakeSlideDeckPdfExporter? pdfExporter = null) =>
-        new(settings ?? new(), scanner ?? new(), host ?? new(), reader ?? new(), windowService ?? new(), displayService ?? new(), pdfExporter);
+        FakeSlideDeckPdfExporter? pdfExporter = null,
+        FakeDisplaySelector? displaySelector = null) =>
+        new(settings ?? new(), scanner ?? new(), host ?? new(), reader ?? new(), windowService ?? new(), displayService ?? new(), pdfExporter, displaySelector);
 
     private static PresentationProject MakeProject(string name = "Talk") => new()
     {
@@ -1115,5 +1133,240 @@ public class MainViewModelTests
 
         Assert.False(vm.HasLastKnownPosition);
         Assert.False(vm.ResumeCommand.CanExecute(null));
+    }
+
+    // ---- Display selection on presentation start ----
+
+    private static (FakeSettingsService settings, FakeProcessHost host, FakePresentationWindowService windowService, FakeDisplayService displayService) MakeMultiDisplaySetup()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.DisplayManagement.AutoDetectDisplays = true;
+        var displayService = new FakeDisplayService();
+        displayService.Displays.Add(new DisplayInfo(0, true, 0, 0, 1920, 1080));
+        displayService.Displays.Add(new DisplayInfo(1, false, 1920, 0, 2560, 1440));
+        displayService.Displays.Add(new DisplayInfo(2, false, 4480, 0, 1920, 1080));
+        return (settings, new FakeProcessHost(), new FakePresentationWindowService(), displayService);
+    }
+
+    [Fact]
+    public async Task WhenHostRunning_WithMultipleDisplays_AsksSelectorAndOpensOnChosenDisplay()
+    {
+        var (settings, host, windowService, displayService) = MakeMultiDisplaySetup();
+        var selector = new FakeDisplaySelector { Result = displayService.Displays[2] };
+        var vm = CreateViewModel(settings, host: host, windowService: windowService, displayService: displayService, displaySelector: selector);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        Assert.Equal(1, selector.CallCount);
+        Assert.Equal(3, selector.OfferedDisplays!.Count);
+        Assert.Equal(1, windowService.OpenCallCount);
+        Assert.Equal(displayService.Displays[2], windowService.LastTargetDisplay);
+    }
+
+    [Fact]
+    public async Task WhenHostRunning_WithSingleDisplay_DoesNotAskSelector()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.DisplayManagement.AutoDetectDisplays = true;
+        var displayService = new FakeDisplayService();
+        displayService.Displays.Add(new DisplayInfo(0, true, 0, 0, 1920, 1080));
+        var host = new FakeProcessHost();
+        var windowService = new FakePresentationWindowService();
+        var selector = new FakeDisplaySelector { Result = displayService.Displays[0] };
+        var vm = CreateViewModel(settings, host: host, windowService: windowService, displayService: displayService, displaySelector: selector);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        Assert.Equal(0, selector.CallCount);
+        Assert.Equal(1, windowService.OpenCallCount);
+        Assert.Null(windowService.LastTargetDisplay);
+    }
+
+    [Fact]
+    public async Task WhenSelectorDeclines_DoesNotOpenParticipantWindow()
+    {
+        var (settings, host, windowService, displayService) = MakeMultiDisplaySetup();
+        var selector = new FakeDisplaySelector { Result = null };
+        var vm = CreateViewModel(settings, host: host, windowService: windowService, displayService: displayService, displaySelector: selector);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        Assert.Equal(1, selector.CallCount);
+        Assert.Equal(0, windowService.OpenCallCount);
+        Assert.Equal(HostState.Running, vm.HostState);
+    }
+
+    [Fact]
+    public async Task NavigatingWithinRunningSession_ReusesDisplayChoice_WithoutAskingAgain()
+    {
+        var (settings, host, windowService, displayService) = MakeMultiDisplaySetup();
+        var selector = new FakeDisplaySelector { Result = displayService.Displays[1] };
+        var vm = CreateViewModel(settings, host: host, windowService: windowService, displayService: displayService, displaySelector: selector);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        await vm.StartFromBeginningAsync();
+
+        Assert.Equal(1, selector.CallCount);
+        Assert.Equal(2, windowService.OpenCallCount);
+        Assert.Equal(displayService.Displays[1], windowService.LastTargetDisplay);
+    }
+
+    [Fact]
+    public async Task RestartingSession_AsksForDisplayAgain()
+    {
+        var (settings, host, windowService, displayService) = MakeMultiDisplaySetup();
+        var selector = new FakeDisplaySelector { Result = displayService.Displays[1] };
+        var vm = CreateViewModel(settings, host: host, windowService: windowService, displayService: displayService, displaySelector: selector);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+        await vm.StopAsync();
+
+        await vm.LaunchAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        Assert.Equal(2, selector.CallCount);
+        Assert.Equal(2, windowService.OpenCallCount);
+    }
+
+    [Fact]
+    public async Task WhenSessionStopsWhileSelectorIsOpen_DoesNotOpenParticipantWindow()
+    {
+        var (settings, host, windowService, displayService) = MakeMultiDisplaySetup();
+        var selector = new FakeDisplaySelector { PendingResult = new TaskCompletionSource<DisplayInfo?>() };
+        var vm = CreateViewModel(settings, host: host, windowService: windowService, displayService: displayService, displaySelector: selector);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+        Assert.Equal(0, windowService.OpenCallCount);
+
+        await vm.StopAsync();
+        selector.PendingResult.SetResult(displayService.Displays[1]);
+        await Task.Yield();
+
+        Assert.Equal(0, windowService.OpenCallCount);
+    }
+
+    // ---- Library import / export ----
+
+    private static PresentationSource MakeHostedSource(string name, string url) => new()
+    {
+        Id = Guid.NewGuid(),
+        Name = name,
+        Type = PresentationSourceType.HostedUrl,
+        Location = url
+    };
+
+    [Fact]
+    public async Task ExportLibrary_WritesHostedSourcesAsSourceList()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.Sources.Add(MakeHostedSource("Talk", "https://slides.example.com/talk/"));
+        var vm = CreateViewModel(settings);
+
+        using var stream = new MemoryStream();
+        await vm.ExportLibraryAsync(stream);
+        stream.Position = 0;
+
+        var reimported = await PresentationSourceListSerializer.ImportAsync(stream);
+        var single = Assert.Single(reimported);
+        Assert.Equal("Talk", single.Name);
+        Assert.Equal("https://slides.example.com/talk/", single.Location);
+        Assert.Equal("Library exported.", vm.LibraryMessage);
+    }
+
+    [Fact]
+    public async Task ImportLibrary_AddsNewSources_SkipsDuplicates_AndRefreshes()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.Sources.Add(MakeHostedSource("Existing", "https://slides.example.com/existing/"));
+        var vm = CreateViewModel(settings);
+
+        using var exportStream = new MemoryStream();
+        await PresentationSourceListSerializer.ExportAsync(
+        [
+            MakeHostedSource("Existing", "https://slides.example.com/EXISTING/"),
+            MakeHostedSource("New", "https://slides.example.com/new/")
+        ], exportStream);
+        exportStream.Position = 0;
+
+        await vm.ImportLibraryAsync(exportStream);
+
+        Assert.Equal(2, settings.Settings.Sources.Count);
+        Assert.Contains(settings.Settings.Sources, s => s.Name == "New");
+        Assert.Equal(2, vm.Projects.Count);
+        Assert.Contains("Imported 1", vm.LibraryMessage);
+        Assert.Contains("skipped 1", vm.LibraryMessage);
+    }
+
+    [Fact]
+    public async Task ImportLibrary_WithInvalidJson_Throws()
+    {
+        var vm = CreateViewModel();
+        using var stream = new MemoryStream("not json"u8.ToArray());
+
+        await Assert.ThrowsAnyAsync<Exception>(() => vm.ImportLibraryAsync(stream));
+        Assert.Empty(vm.Projects);
+    }
+
+    // ---- Library context menu commands ----
+
+    [Fact]
+    public async Task RemoveSelectedProjectFromLibrary_RemovesMatchingSource()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.Sources.Add(MakeHostedSource("Keep", "https://slides.example.com/keep/"));
+        settings.Settings.Sources.Add(MakeHostedSource("Drop", "https://slides.example.com/drop/"));
+        var vm = CreateViewModel(settings);
+        await vm.RefreshLibraryAsync();
+        vm.SelectedProject = vm.Projects.Single(p => p.Name == "Drop");
+
+        Assert.True(vm.RemoveSelectedProjectFromLibraryCommand.CanExecute(null));
+        await vm.RemoveSelectedProjectFromLibraryAsync();
+
+        var remaining = Assert.Single(settings.Settings.Sources);
+        Assert.Equal("Keep", remaining.Name);
+        Assert.Single(vm.Projects);
+        Assert.Contains("Drop", vm.LibraryMessage);
+    }
+
+    [Fact]
+    public async Task RemoveSelectedProjectFromLibrary_CannotExecute_ForRootScannedProjects()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.Sources.Add(new PresentationSource
+        {
+            Id = Guid.NewGuid(),
+            Name = "Root",
+            Type = PresentationSourceType.LocalRoot,
+            Location = "/tmp/root"
+        });
+        var scanner = new FakeSourceScanner();
+        scanner.Projects.Add(MakeProject("Scanned"));
+        var vm = CreateViewModel(settings, scanner);
+        await vm.RefreshLibraryAsync();
+        vm.SelectedProject = vm.Projects.Single();
+
+        Assert.False(vm.CanRemoveSelectedProject);
+        Assert.False(vm.RemoveSelectedProjectFromLibraryCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void OpenSelectedProjectLocationCommand_CannotExecute_WhenNothingSelected()
+    {
+        var vm = CreateViewModel();
+
+        Assert.False(vm.OpenSelectedProjectLocationCommand.CanExecute(null));
+
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        Assert.True(vm.OpenSelectedProjectLocationCommand.CanExecute(null));
     }
 }

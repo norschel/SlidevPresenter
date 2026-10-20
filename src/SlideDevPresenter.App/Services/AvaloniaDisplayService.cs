@@ -26,7 +26,8 @@ public sealed class AvaloniaDisplayService : IDisplayService
                 X: screen.Bounds.X,
                 Y: screen.Bounds.Y,
                 Width: screen.Bounds.Width,
-                Height: screen.Bounds.Height));
+                Height: screen.Bounds.Height,
+                Name: screen.DisplayName));
         }
         return result.AsReadOnly();
     }
