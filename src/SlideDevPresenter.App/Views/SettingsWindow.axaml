@@ -127,9 +127,14 @@
             </TabItem>
         </TabControl>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
-            <Button Content="Save" Command="{Binding SaveCommand}"/>
-            <Button Content="Close" Click="Close_Click"/>
-        </StackPanel>
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+            <TextBlock Text="{Binding ConfigurationMessage}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <Button Content="Export..." Click="Export_Click"/>
+                <Button Content="Import..." Click="Import_Click"/>
+                <Button Content="Save" Command="{Binding SaveCommand}"/>
+                <Button Content="Close" Click="Close_Click"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

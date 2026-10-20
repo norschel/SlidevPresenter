@@ -15,6 +15,8 @@ internal sealed class FakeSettingsServiceForShortcuts : ISettingsService
     public AppSettings Settings { get; } = new();
     public Task LoadAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task SaveAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task ExportAsync(Stream destination, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task ImportAsync(Stream source, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 public sealed class ShortcutServiceTests
