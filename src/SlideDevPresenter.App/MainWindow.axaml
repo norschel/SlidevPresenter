@@ -23,6 +23,7 @@
                     <ToggleButton Content="View" IsChecked="{Binding IsViewRibbonSelected, Mode=OneWay}" Command="{Binding SelectViewRibbonCommand}"/>
                     <ToggleButton Content="Presentation" IsChecked="{Binding IsPresentationRibbonSelected, Mode=OneWay}" Command="{Binding SelectPresentationRibbonCommand}"/>
                     <ToggleButton Content="Browser" IsChecked="{Binding IsBrowserRibbonSelected, Mode=OneWay}" Command="{Binding SelectBrowserRibbonCommand}"/>
+                    <ToggleButton Content="Edit" IsVisible="{Binding ShowEditTab}" IsChecked="{Binding IsEditRibbonSelected, Mode=OneWay}" Command="{Binding SelectEditRibbonCommand}"/>
                     <Button Content="Settings" Click="Settings_Click" ToolTip.Tip="Open application settings"/>
                 </StackPanel>
 
@@ -68,6 +69,10 @@
                             <Button Content="Next ▶" Click="NextSlide_Click" IsVisible="{Binding IsRunning}" IsEnabled="{Binding CanShowEmbeddedSurface}" ToolTip.Tip="Next slide"/>
                             <Button Content="Detect Displays" Command="{Binding DetectDisplaysCommand}" ToolTip.Tip="Detect connected displays"/>
                             <TextBlock Text="{Binding DetectedDisplayCount, StringFormat='Displays: {0}'}" VerticalAlignment="Center" Margin="4,0,0,0" IsVisible="{Binding HasDetectedDisplays}"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsEditRibbonSelected}">
+                            <Button Content="Open in VS Code" Command="{Binding EditSelectedProjectCommand}" ToolTip.Tip="Edit the selected presentation folder in the configured VS Code release"/>
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsBrowserRibbonSelected}">

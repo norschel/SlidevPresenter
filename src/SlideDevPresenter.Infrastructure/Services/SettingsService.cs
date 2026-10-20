@@ -100,6 +100,7 @@ public sealed class SettingsService : ISettingsService
             || importedSettings.DisplayManagement is null
             || importedSettings.Shortcuts is null
             || importedSettings.Navigation is null
+            || importedSettings.Editing is null
             || importedSettings.Sources.Any(source => source is null || source.Name is null || source.Location is null))
         {
             throw new InvalidDataException("The configuration file is missing required settings.");

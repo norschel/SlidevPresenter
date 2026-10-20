@@ -48,6 +48,7 @@ public partial class App : Application
             _mainWindow.Opened += async (_, _) =>
             {
                 await _settingsService.LoadAsync();
+                _mainViewModel.RefreshPreferences();
                 themeService.ApplyTheme(_settingsService.Settings.Appearance.Theme);
                 await _mainViewModel.RefreshLibraryAsync();
             };
