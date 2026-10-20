@@ -121,6 +121,21 @@ internal sealed class FakeDisplayService : IDisplayService
     public IReadOnlyList<DisplayInfo> GetDisplays() => Displays.AsReadOnly();
 }
 
+internal sealed class FakeSlideDeckPdfExporter : ISlideDeckPdfExporter
+{
+    public PresentationProject? ExportedProject { get; private set; }
+    public string? OutputPath { get; private set; }
+    public Exception? ExceptionToThrow { get; set; }
+    public Task? ExportTask { get; set; }
+
+    public Task ExportPdfAsync(PresentationProject project, string outputPath, CancellationToken cancellationToken = default)
+    {
+        ExportedProject = project;
+        OutputPath = outputPath;
+        return ExportTask ?? (ExceptionToThrow is null ? Task.CompletedTask : Task.FromException(ExceptionToThrow));
+    }
+}
+
 public class MainViewModelTests
 {
     private static MainViewModel CreateViewModel(
@@ -129,8 +144,9 @@ public class MainViewModelTests
         FakeProcessHost? host = null,
         FakeSlideDeckMetadataReader? reader = null,
         FakePresentationWindowService? windowService = null,
-        FakeDisplayService? displayService = null) =>
-        new(settings ?? new(), scanner ?? new(), host ?? new(), reader ?? new(), windowService ?? new(), displayService ?? new());
+        FakeDisplayService? displayService = null,
+        FakeSlideDeckPdfExporter? pdfExporter = null) =>
+        new(settings ?? new(), scanner ?? new(), host ?? new(), reader ?? new(), windowService ?? new(), displayService ?? new(), pdfExporter);
 
     private static PresentationProject MakeProject(string name = "Talk") => new()
     {
@@ -152,6 +168,71 @@ public class MainViewModelTests
         Assert.False(vm.IsError);
         Assert.Empty(vm.Projects);
         Assert.Null(vm.SelectedProject);
+    }
+
+    [Fact]
+    public async Task ExportPdf_UsesSelectedLocalProjectAndUpdatesMessage()
+    {
+        var pdfExporter = new FakeSlideDeckPdfExporter();
+        var vm = CreateViewModel(pdfExporter: pdfExporter);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+
+        await vm.ExportPdfAsync("/tmp/talk.pdf");
+
+        Assert.NotNull(pdfExporter.ExportedProject);
+        Assert.Equal("Talk", pdfExporter.ExportedProject.Name);
+        Assert.Equal("/tmp/talk.pdf", pdfExporter.OutputPath);
+        Assert.Equal("PDF exported to talk.pdf.", vm.PdfExportMessage);
+        Assert.False(vm.IsExportingPdf);
+    }
+
+    [Fact]
+    public async Task ExportPdf_ShowsProgressMessageWhileExporterIsRunning()
+    {
+        var exportCompletion = new TaskCompletionSource();
+        var pdfExporter = new FakeSlideDeckPdfExporter { ExportTask = exportCompletion.Task };
+        var vm = CreateViewModel(pdfExporter: pdfExporter);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+
+        var exportTask = vm.ExportPdfAsync("/tmp/talk.pdf");
+
+        Assert.True(vm.IsExportingPdf);
+        Assert.Equal("Exporting PDF...", vm.PdfExportMessage);
+
+        exportCompletion.SetResult();
+        await exportTask;
+        Assert.Equal("PDF exported to talk.pdf.", vm.PdfExportMessage);
+    }
+
+    [Fact]
+    public async Task ExportPdf_ReportsExporterErrors()
+    {
+        var pdfExporter = new FakeSlideDeckPdfExporter { ExceptionToThrow = new InvalidOperationException("npx not found") };
+        var vm = CreateViewModel(pdfExporter: pdfExporter);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+
+        await vm.ExportPdfAsync("/tmp/talk.pdf");
+
+        Assert.Equal("PDF export failed: npx not found", vm.PdfExportMessage);
+        Assert.False(vm.IsExportingPdf);
+    }
+
+    [Fact]
+    public async Task ExportPdf_IsUnavailableForHostedProjects()
+    {
+        var pdfExporter = new FakeSlideDeckPdfExporter();
+        var vm = CreateViewModel(pdfExporter: pdfExporter);
+        vm.SelectedProject = new PresentationProjectViewModel(new PresentationProject
+        {
+            Id = Guid.NewGuid(),
+            Name = "Hosted Talk",
+            SourceType = PresentationSourceType.HostedUrl,
+            Location = "https://slides.example.com"
+        });
+
+        Assert.False(vm.CanExportPdf);
+        await vm.ExportPdfAsync("/tmp/talk.pdf");
+        Assert.Null(pdfExporter.ExportedProject);
     }
 
     [Fact]
