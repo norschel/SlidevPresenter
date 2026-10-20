@@ -14,6 +14,7 @@ public partial class ParticipantWindow : Window
     private readonly PresentationEscapeHandler _escapeHandler;
     private bool _exitRaised;
     private bool _isFullscreenRequested;
+    private bool _isScreenBlanked;
 
     /// <summary>Raised when the user requests to exit the presentation (e.g. via ESC).</summary>
     public event EventHandler? PresentationExited;
@@ -60,15 +61,46 @@ public partial class ParticipantWindow : Window
         AddHandler(InputElement.KeyDownEvent, OnWindowPreviewKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
         WebView.KeyDown += OnWindowPreviewKeyDown;
         WebView.NavigationStarted += OnWebViewNavigationStarted;
+        WebView.NavigationCompleted += OnWebViewNavigationCompleted;
         WebView.NewWindowRequested += OnWebViewNewWindowRequested;
+        WebView.WebMessageReceived += OnWebViewWebMessageReceived;
     }
 
     private void OnWindowPreviewKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Handled || WebViewKeyboardBridge.TryHandleKey(WebView, e, _isScreenBlanked))
+            return;
+
         // BUG-006: Always handle ESC to fully close the session, even if the WebView has already
         // processed it (e.g. to exit an embedded fullscreen video).
         if (_escapeHandler.TryHandle(e.Key))
             e.Handled = true;
+    }
+
+    private async void OnWebViewNavigationCompleted(object? sender, WebViewNavigationCompletedEventArgs e)
+    {
+        if (!e.IsSuccess)
+            return;
+
+        try
+        {
+            _isScreenBlanked = false;
+            await WebView.InvokeScript(WebViewKeyboardBridge.Script);
+            WebView.Focus();
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Trace.TraceError($"Could not install presentation keyboard bridge: {exception}");
+        }
+    }
+
+    private void OnWebViewWebMessageReceived(object? sender, WebMessageReceivedEventArgs e)
+    {
+        if (WebViewKeyboardBridge.GetBlankState(e.Body) is bool isBlanked)
+            _isScreenBlanked = isBlanked;
+
+        if (WebViewKeyboardBridge.IsEscapeMessage(e.Body))
+            _escapeHandler.TryHandle(Key.Escape);
     }
 
     private void OnOpened(object? sender, EventArgs e)

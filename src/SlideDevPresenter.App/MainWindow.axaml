@@ -29,7 +29,7 @@
                 <Border Grid.Row="1" Margin="0,12,0,0" Background="#2D2D2D" CornerRadius="8" Padding="12">
                     <Panel>
                         <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsHomeRibbonSelected}">
-                            <Button Content="▶ Launch" Command="{Binding LaunchCommand}"/>
+                            <Button Content="▶ Start" Command="{Binding LaunchCommand}" ToolTip.Tip="Start presentation"/>
                             <Button Content="■ Stop" Command="{Binding StopCommand}"/>
                             <Button Content="↻ Retry" Command="{Binding RetryCommand}"/>
                             <Button Content="⏎ Resume" Command="{Binding ResumeCommand}" ToolTip.Tip="Resume presentation from last saved position"/>
@@ -104,8 +104,8 @@
                 <Panel IsVisible="{Binding IsNormalWorkspaceVisible}">
                 <StackPanel IsVisible="{Binding IsIdle}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16" MaxWidth="520">
                     <TextBlock Text="SlideDevPresenter" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Select a presentation, launch Slidev, then switch between embedded presenter and participant workflows from the ribbon." Opacity="0.7" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
-                    <Button Content="▶ Launch" Command="{Binding LaunchCommand}" HorizontalAlignment="Center" Padding="16,8"/>
+                    <TextBlock Text="Select a presentation, start Slidev, then switch between embedded presenter and participant workflows from the ribbon." Opacity="0.7" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                    <Button Content="▶ Start" Command="{Binding LaunchCommand}" HorizontalAlignment="Center" Padding="16,8" ToolTip.Tip="Start presentation"/>
                 </StackPanel>
 
                 <StackPanel IsVisible="{Binding IsStarting}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
