@@ -123,7 +123,7 @@ public class SettingsSerializationTests
         var blockerPath = Path.GetTempFileName();
         try
         {
-            var service = CreateService(Path.Combine(blockerPath, "settings.json"));
+            var service = CreateService(Path.Join(blockerPath, "settings.json"));
             service.Settings.Defaults.DefaultPort = 4444;
             const string configuration =
                 """{"sources":[],"defaults":{},"appearance":{},"webView":{},"displayManagement":{},"shortcuts":{},"navigation":{}}""";
