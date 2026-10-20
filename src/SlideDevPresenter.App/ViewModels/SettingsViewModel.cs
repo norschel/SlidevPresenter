@@ -234,7 +234,11 @@ public sealed partial class SettingsViewModel : ObservableObject
             await _settingsService.ExportAsync(destination);
             ConfigurationMessage = "Configuration exported.";
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            ConfigurationMessage = $"Export failed: {ex.Message}";
+        }
+        catch (UnauthorizedAccessException ex)
         {
             ConfigurationMessage = $"Export failed: {ex.Message}";
         }
@@ -249,7 +253,15 @@ public sealed partial class SettingsViewModel : ObservableObject
             _themeService.ApplyTheme(Theme);
             ConfigurationMessage = "Configuration imported.";
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            ConfigurationMessage = $"Import failed: {ex.Message}";
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            ConfigurationMessage = $"Import failed: {ex.Message}";
+        }
+        catch (InvalidDataException ex)
         {
             ConfigurationMessage = $"Import failed: {ex.Message}";
         }
