@@ -9,7 +9,7 @@ namespace SlideDevPresenter.Tests.Services;
 public sealed class CodeEditorServiceTests : IDisposable
 {
     private readonly string _root = Path.Combine(
-        Directory.GetCurrentDirectory(), "code-editor-tests-" + Guid.NewGuid().ToString("N"));
+        Path.GetTempPath(), "code-editor-tests-" + Guid.NewGuid().ToString("N"));
     private readonly Dictionary<string, string?> _environment = new();
     private readonly HashSet<string> _executables = new();
     private readonly List<ProcessStartInfo> _launches = [];
