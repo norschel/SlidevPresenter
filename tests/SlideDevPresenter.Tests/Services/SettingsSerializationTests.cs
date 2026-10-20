@@ -98,6 +98,48 @@ public class SettingsSerializationTests
     }
 
     [Fact]
+    public async Task ImportAsync_WhenRequiredSectionsAreMissing_DoesNotReplaceSettings()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var service = CreateService(path);
+            service.Settings.Defaults.DefaultPort = 4444;
+            await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{}"));
+
+            await Assert.ThrowsAsync<InvalidDataException>(() => service.ImportAsync(stream));
+
+            Assert.Equal(4444, service.Settings.Defaults.DefaultPort);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenPersistenceFails_DoesNotReplaceSettings()
+    {
+        var blockerPath = Path.GetTempFileName();
+        try
+        {
+            var service = CreateService(Path.Combine(blockerPath, "settings.json"));
+            service.Settings.Defaults.DefaultPort = 4444;
+            const string configuration =
+                """{"sources":[],"defaults":{},"appearance":{},"webView":{},"displayManagement":{},"shortcuts":{},"navigation":{}}""";
+            await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(configuration));
+
+            await Assert.ThrowsAnyAsync<IOException>(() => service.ImportAsync(stream));
+
+            Assert.Equal(4444, service.Settings.Defaults.DefaultPort);
+        }
+        finally
+        {
+            File.Delete(blockerPath);
+        }
+    }
+
+    [Fact]
     public async Task SaveAsync_ThenLoadAsync_RoundTripsSources()
     {
         var path = Path.GetTempFileName();

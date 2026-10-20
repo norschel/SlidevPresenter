@@ -35,6 +35,11 @@ public partial class SettingsWindow : Window
                 return;
 
             await using var stream = await file.OpenWriteAsync();
+            if (stream.CanSeek)
+            {
+                stream.SetLength(0);
+                stream.Position = 0;
+            }
             await viewModel.ExportConfigurationAsync(stream);
         }
         catch (System.IO.IOException ex)
