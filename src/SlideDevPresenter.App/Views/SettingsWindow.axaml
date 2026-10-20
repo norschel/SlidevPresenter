@@ -18,7 +18,7 @@
         <TabControl Grid.Row="0">
             <TabItem Header="Sources">
                 <Grid ColumnDefinitions="260,*" Margin="8">
-                    <Grid Grid.Column="0" RowDefinitions="*,Auto">
+                    <Grid Grid.Column="0" RowDefinitions="*,Auto,Auto">
                         <ListBox Grid.Row="0"
                                  ItemsSource="{Binding Sources}"
                                  SelectedItem="{Binding SelectedSource}">
@@ -37,6 +37,10 @@
                             <Button Content="+ URL" Command="{Binding AddHostedUrlSourceCommand}" ToolTip.Tip="Add hosted URL"/>
                             <Button Content="Remove" Command="{Binding RemoveSelectedSourceCommand}" ToolTip.Tip="Remove selected source"/>
                         </StackPanel>
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="4" Margin="0,4,0,0">
+                            <Button Content="Import list..." Click="ImportSourceList_Click"/>
+                            <Button Content="Export list..." Click="ExportSourceList_Click"/>
+                        </StackPanel>
                     </Grid>
 
                     <Grid Grid.Column="1" Margin="12,0,0,0"
@@ -49,6 +53,10 @@
                             <TextBlock Text="Location"/>
                             <TextBox Text="{Binding SelectedSource.Location}"/>
                             <CheckBox Content="Enabled" IsChecked="{Binding SelectedSource.IsEnabled}"/>
+                            <TextBlock Text="Comment"/>
+                            <TextBox Text="{Binding SelectedSource.Comment}"/>
+                            <CheckBox Content="Public" IsChecked="{Binding SelectedSource.IsPublic}"/>
+                            <CheckBox Content="Authentication required" IsChecked="{Binding SelectedSource.RequiresAuthentication}"/>
                         </StackPanel>
                     </Grid>
                 </Grid>

@@ -156,4 +156,42 @@ public sealed class SettingsViewModelTests
         Assert.Equal("Dark", themeService.LastAppliedTheme);
         Assert.Equal("Configuration imported.", vm.ConfigurationMessage);
     }
+
+    [Fact]
+    public async Task ImportSourceListAsync_AppendsOnlineSourcesWithoutRemovingExistingSources()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.Sources.Add(new SlideDevPresenter.Core.Models.PresentationSource
+        {
+            Id = Guid.NewGuid(),
+            Name = "Local",
+            Type = SlideDevPresenter.Core.Models.PresentationSourceType.LocalRoot,
+            Location = "~/slides"
+        });
+        var vm = new SettingsViewModel(settings, new FakeThemeService());
+        const string json = """
+            {
+              "version": 1,
+              "sources": [
+                {
+                  "title": "Shared",
+                  "address": "https://slides.example.com/talk",
+                  "type": "https",
+                  "comment": "Shared deck",
+                  "isPublic": true,
+                  "requiresAuthentication": false
+                }
+              ]
+            }
+            """;
+        await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+
+        await vm.ImportSourceListAsync(stream);
+
+        Assert.Equal(2, vm.Sources.Count);
+        Assert.Equal("Local", vm.Sources[0].Name);
+        Assert.Equal("Shared", vm.Sources[1].Name);
+        Assert.Equal("Shared deck", vm.Sources[1].Comment);
+        Assert.Equal("Source list imported.", vm.ConfigurationMessage);
+    }
 }
