@@ -80,7 +80,7 @@ public partial class ParticipantWindow : Window
 
         try
         {
-            await WebView.InvokeScript(WebViewEscapeBridge.Script);
+            await WebView.InvokeScript(WebViewKeyboardBridge.Script);
         }
         catch
         {
@@ -90,7 +90,7 @@ public partial class ParticipantWindow : Window
 
     private void OnWebViewWebMessageReceived(object? sender, WebMessageReceivedEventArgs e)
     {
-        if (WebViewEscapeBridge.IsEscapeMessage(e.Body))
+        if (WebViewKeyboardBridge.IsEscapeMessage(e.Body))
             _escapeHandler.TryHandle(Key.Escape);
     }
 

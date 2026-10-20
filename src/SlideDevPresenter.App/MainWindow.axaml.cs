@@ -337,7 +337,9 @@ public partial class MainWindow : Window
 
         try
         {
-            await webView.InvokeScript(WebViewEscapeBridge.Script);
+            await webView.InvokeScript(ReferenceEquals(webView, BrowserWebView)
+                ? WebViewKeyboardBridge.EscapeScript
+                : WebViewKeyboardBridge.Script);
         }
         catch
         {
@@ -347,7 +349,7 @@ public partial class MainWindow : Window
 
     private void OnWebViewWebMessageReceived(object? sender, WebMessageReceivedEventArgs e)
     {
-        if (WebViewEscapeBridge.IsEscapeMessage(e.Body))
+        if (WebViewKeyboardBridge.IsEscapeMessage(e.Body))
             HandleEscape();
     }
 
