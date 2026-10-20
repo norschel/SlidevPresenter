@@ -14,6 +14,7 @@ public partial class ParticipantWindow : Window
     private readonly PresentationEscapeHandler _escapeHandler;
     private bool _exitRaised;
     private bool _isFullscreenRequested;
+    private bool _isScreenBlanked;
 
     /// <summary>Raised when the user requests to exit the presentation (e.g. via ESC).</summary>
     public event EventHandler? PresentationExited;
@@ -67,6 +68,9 @@ public partial class ParticipantWindow : Window
 
     private void OnWindowPreviewKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Handled || WebViewKeyboardBridge.TryHandleKey(WebView, e, _isScreenBlanked))
+            return;
+
         // BUG-006: Always handle ESC to fully close the session, even if the WebView has already
         // processed it (e.g. to exit an embedded fullscreen video).
         if (_escapeHandler.TryHandle(e.Key))
@@ -80,16 +84,21 @@ public partial class ParticipantWindow : Window
 
         try
         {
+            _isScreenBlanked = false;
             await WebView.InvokeScript(WebViewKeyboardBridge.Script);
+            WebView.Focus();
         }
-        catch
+        catch (Exception exception)
         {
-            // Script injection is best-effort; the Avalonia key handlers remain as fallback.
+            System.Diagnostics.Trace.TraceError($"Could not install presentation keyboard bridge: {exception}");
         }
     }
 
     private void OnWebViewWebMessageReceived(object? sender, WebMessageReceivedEventArgs e)
     {
+        if (WebViewKeyboardBridge.GetBlankState(e.Body) is bool isBlanked)
+            _isScreenBlanked = isBlanked;
+
         if (WebViewKeyboardBridge.IsEscapeMessage(e.Body))
             _escapeHandler.TryHandle(Key.Escape);
     }

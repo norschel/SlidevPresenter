@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private Panel? _embeddedWebViewHost;
     private Panel? _browserWebViewHost;
     private bool _embeddedWebViewsDisabledForSession;
+    private bool _isPresentationBlanked;
 
     /// <summary>Parameterless constructor for Avalonia designer.</summary>
     public MainWindow()
@@ -321,11 +322,17 @@ public partial class MainWindow : Window
 
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
+        if (TryHandlePresentationKey(e))
+            return;
+
         TryHandleEscape(e);
     }
 
     private void OnWebViewKeyDown(object? sender, KeyEventArgs e)
     {
+        if (TryHandlePresentationKey(e))
+            return;
+
         // Fallback: catch ESC forwarded by NativeWebView managed KeyDown event.
         TryHandleEscape(e);
     }
@@ -337,25 +344,35 @@ public partial class MainWindow : Window
 
         try
         {
+            if (ReferenceEquals(webView, EmbeddedWebView))
+                _isPresentationBlanked = false;
+
             await webView.InvokeScript(ReferenceEquals(webView, BrowserWebView)
                 ? WebViewKeyboardBridge.EscapeScript
                 : WebViewKeyboardBridge.Script);
         }
-        catch
+        catch (Exception exception)
         {
-            // Script injection is best-effort; the Avalonia key handlers remain as fallback.
+            System.Diagnostics.Trace.TraceError($"Could not install WebView keyboard bridge: {exception}");
         }
     }
 
     private void OnWebViewWebMessageReceived(object? sender, WebMessageReceivedEventArgs e)
     {
+        if (ReferenceEquals(sender, EmbeddedWebView) && WebViewKeyboardBridge.GetBlankState(e.Body) is bool isBlanked)
+            _isPresentationBlanked = isBlanked;
+
         if (WebViewKeyboardBridge.IsEscapeMessage(e.Body))
             HandleEscape();
     }
 
+    private bool TryHandlePresentationKey(KeyEventArgs e) =>
+        e.Handled || (!_embeddedWebViewsDisabledForSession && _viewModel?.CanShowEmbeddedSurface == true
+            && WebViewKeyboardBridge.TryHandleKey(EmbeddedWebView, e, _isPresentationBlanked));
+
     private void TryHandleEscape(KeyEventArgs e)
     {
-        if (e.Key != Key.Escape)
+        if (e.Handled || e.Key != Key.Escape)
             return;
 
         if (HandleEscape())
