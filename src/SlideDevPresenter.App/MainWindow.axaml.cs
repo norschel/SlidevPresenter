@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Input;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using SlideDevPresenter.App.Services;
 using SlideDevPresenter.App.ViewModels;
@@ -75,6 +76,29 @@ public partial class MainWindow : Window
         _viewModel.RefreshPreferences();
         ReconfigureShortcuts();
         await _viewModel.RefreshLibraryAsync();
+    }
+
+    private async void ExportPdf_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel is null || !_viewModel.CanExportPdf)
+            return;
+
+        try
+        {
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Export presentation to PDF",
+                SuggestedFileName = "presentation.pdf",
+                DefaultExtension = "pdf",
+                FileTypeChoices = [new FilePickerFileType("PDF") { Patterns = ["*.pdf"] }]
+            });
+            if (file is not null)
+                await _viewModel.ExportPdfAsync(file.Path.LocalPath);
+        }
+        catch (Exception exception)
+        {
+            _viewModel.PdfExportMessage = $"PDF export failed: {exception.Message}";
+        }
     }
 
     private void ConfigureEmbeddedWebView()

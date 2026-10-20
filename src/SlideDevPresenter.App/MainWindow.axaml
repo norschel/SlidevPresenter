@@ -41,6 +41,7 @@
 
                         <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsLibraryRibbonSelected}">
                             <Button Content="↻ Refresh Library" Command="{Binding RefreshLibraryCommand}"/>
+                            <Button Content="Export PDF" Click="ExportPdf_Click" IsEnabled="{Binding CanExportPdf}" ToolTip.Tip="Export the selected local Slidev deck as a PDF"/>
                             <TextBlock Text="{Binding DeckTitle}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="12,0,0,0"/>
                             <TextBlock Text="{Binding SlideCount, StringFormat='Slides: {0}'}" VerticalAlignment="Center" Opacity="0.7"/>
                         </StackPanel>
@@ -271,6 +272,7 @@
                 <TextBlock Text="{Binding ElapsedPresentationTimeText, StringFormat='Elapsed: {0}'}" FontSize="12"/>
                 <TextBlock Text="{Binding Port, StringFormat='Port: {0}'}" FontSize="12"/>
                 <TextBlock Text="{Binding SlideCount, StringFormat='Slides: {0}'}" FontSize="12"/>
+                <TextBlock Text="{Binding PdfExportMessage}" FontSize="12"/>
             </StackPanel>
         </Border>
     </Grid>
