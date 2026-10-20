@@ -18,6 +18,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly ISlideDeckMetadataReader _slideDeckMetadataReader;
     private readonly IPresentationWindowService _presentationWindowService;
     private readonly IDisplayService _displayService;
+    private readonly ISlideDeckPdfExporter _slideDeckPdfExporter;
     private readonly SynchronizationContext? _syncContext;
     private CancellationTokenSource? _timerCts;
     private DateTimeOffset? _sessionStartedAt;
@@ -36,10 +37,18 @@ public sealed partial class MainViewModel : ObservableObject
     public ObservableCollection<SlideDeckSlide> Slides { get; } = [];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanExportPdf))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
     [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
     private PresentationProjectViewModel? _selectedProject;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanExportPdf))]
+    private bool _isExportingPdf;
+
+    [ObservableProperty]
+    private string? _pdfExportMessage;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
@@ -159,6 +168,7 @@ public sealed partial class MainViewModel : ObservableObject
     public bool ShowRibbon => _settingsService.Settings.Appearance.ShowRibbon;
     public bool ShowStatusBar => _settingsService.Settings.Appearance.ShowStatusBar;
     public bool HasSlides => Slides.Count > 0;
+    public bool CanExportPdf => SelectedProject?.SourceType == PresentationSourceType.LocalProject && !IsExportingPdf;
     public int SlideCount => Slides.Count;
     public string ElapsedPresentationTimeText => ElapsedPresentationTime.ToString(@"hh\:mm\:ss");
     public string SelectedSlideSummary => SelectedOutlineSlide?.Summary ?? "Select a slide to inspect its summary.";
@@ -183,7 +193,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
     }
 
-    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService, IDisplayService displayService)
+    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService, IDisplayService displayService, ISlideDeckPdfExporter? slideDeckPdfExporter = null)
     {
         _settingsService = settingsService;
         _sourceScanner = sourceScanner;
@@ -191,6 +201,7 @@ public sealed partial class MainViewModel : ObservableObject
         _slideDeckMetadataReader = slideDeckMetadataReader;
         _presentationWindowService = presentationWindowService;
         _displayService = displayService;
+        _slideDeckPdfExporter = slideDeckPdfExporter ?? new SlidevPdfExporter();
         _syncContext = SynchronizationContext.Current;
         _selectedSurfaceMode = ParseSurfaceMode(settingsService.Settings.Defaults.DefaultMode);
 
@@ -328,6 +339,28 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     private bool CanLaunch() => SelectedProject is not null && HostState == HostState.Idle;
+
+    public async Task ExportPdfAsync(string outputPath)
+    {
+        if (!CanExportPdf || SelectedProject is null)
+            return;
+
+        IsExportingPdf = true;
+        PdfExportMessage = null;
+        try
+        {
+            await _slideDeckPdfExporter.ExportPdfAsync(SelectedProject.ToModel(), outputPath);
+            PdfExportMessage = $"PDF exported to {Path.GetFileName(outputPath)}.";
+        }
+        catch (Exception exception)
+        {
+            PdfExportMessage = $"PDF export failed: {exception.Message}";
+        }
+        finally
+        {
+            IsExportingPdf = false;
+        }
+    }
 
     [RelayCommand]
     public async Task StartFromBeginningAsync()
