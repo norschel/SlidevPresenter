@@ -7,4 +7,7 @@ public sealed class PresentationSource
     public required PresentationSourceType Type { get; init; }
     public required string Location { get; set; }
     public bool IsEnabled { get; set; } = true;
+    public string Comment { get; set; } = string.Empty;
+    public bool IsPublic { get; set; } = true;
+    public bool RequiresAuthentication { get; set; }
 }
