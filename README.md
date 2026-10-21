@@ -7,8 +7,8 @@ SlideDevPresenter is a local desktop host for Slidev presentations. It provides 
 Download an installer from [GitHub Releases](https://github.com/norschel/SlidevPresenter/releases/latest):
 
 - **Windows x64**: run the `win-x64` Setup executable. Installation is per-user; the installer also checks for the Microsoft Edge WebView2 runtime used by the embedded browser.
-- **macOS Intel**: choose the `osx-x64` installer.
-- **macOS Apple Silicon**: choose the `osx-arm64` installer.
+- **macOS Intel**: run the `osx-x64` `.pkg` installer.
+- **macOS Apple Silicon**: run the `osx-arm64` `.pkg` installer.
 
 The .NET runtime is included. Node.js and the presentation's package manager are still required for local presentations; Git is required only for repository sources. Settings and checkouts are stored outside the installation and are retained during updates.
 
@@ -20,7 +20,12 @@ Push a stable version tag such as `v1.2.3`. The **Package desktop release** work
 
 The workflow creates a **draft** GitHub Release after all three packages succeed. Review the notes and test installation, launch, embedded browser, uninstall, and an update from the previous version on each platform before publishing the draft. Reruns can replace draft assets, but refuse to overwrite a published release. Keep all generated assets attached, including update feeds (`releases.*.json`) and full `.nupkg` packages: the in-app updater needs them. Channels are `win-x64`, `osx-x64`, and `osx-arm64`; do not rename channels or the package ID between releases. Full packages are used, so no previous release is needed when packaging.
 
-**Signing:** the default workflow produces unsigned installers and does not bypass OS security checks. Windows may show SmartScreen warnings; macOS may block unsigned/unnotarized apps. For trusted public distribution, configure Windows Authenticode signing and Apple Developer ID signing/notarization in the packaging step before publishing. Keep certificates, passwords, and Apple credentials in GitHub Actions secrets, never in the repository. See [Velopack Windows signing](https://docs.velopack.io/packaging/windows/code-signing) and [macOS packaging](https://docs.velopack.io/packaging/osx). Signed/notarized installers still need native-platform verification; a successful cross-publish alone does not verify installation or updating.
+**Signing:** without signing secrets the workflow produces unsigned installers and does not bypass OS security checks. Windows may show SmartScreen warnings; macOS may block unsigned/unnotarized apps. For trusted public distribution, configure these GitHub Actions repository secrets before pushing the tag:
+
+- Windows: `WINDOWS_CERTIFICATE_PFX` (base64-encoded Authenticode PFX) and `WINDOWS_CERTIFICATE_PASSWORD`. The workflow imports it into the ephemeral runner's user certificate store; Velopack signs and timestamps the application and installer.
+- macOS: `MACOS_CERTIFICATE_P12` (base64-encoded export containing both Developer ID Application and Developer ID Installer certificates/private keys), `MACOS_CERTIFICATE_PASSWORD`, `MACOS_SIGN_APP_IDENTITY`, and `MACOS_SIGN_INSTALL_IDENTITY`. Supply the identity names without the parenthesized team suffix, as required by Velopack. Set `MACOS_APPLE_ID`, `MACOS_APPLE_PASSWORD` (app-specific password), and `MACOS_TEAM_ID` for notarization. The workflow uses a temporary keychain and removes it after packaging.
+
+Never commit certificates or credentials. Providing a certificate enables signing; invalid or incomplete signing configuration fails the job rather than silently publishing unsigned output. See [Velopack signing](https://docs.velopack.io/packaging/signing) and [macOS packaging](https://docs.velopack.io/packaging/operating-systems/macos). Signed/notarized installers still need native-platform verification; a successful cross-publish alone does not verify installation or updating.
 
 ## Presentation Sources
 

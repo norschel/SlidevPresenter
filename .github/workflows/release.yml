@@ -71,12 +71,54 @@ jobs:
           dotnet publish $env:APP_PROJECT --configuration Release --runtime $env:RID --self-contained true `
             -p:Version=$env:VERSION -p:PublishSingleFile=false -p:PublishTrimmed=false --output publish
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Generate macOS application icon
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/app.iconset"
+          sips -s format png src/SlideDevPresenter.App/Assets/appicon.ico --out "$RUNNER_TEMP/app.png"
+          for size in 16 32 128 256 512; do
+            sips -z "$size" "$size" "$RUNNER_TEMP/app.png" --out "$RUNNER_TEMP/app.iconset/icon_${size}x${size}.png"
+            double=$((size * 2))
+            sips -z "$double" "$double" "$RUNNER_TEMP/app.png" --out "$RUNNER_TEMP/app.iconset/icon_${size}x${size}@2x.png"
+          done
+          iconutil -c icns "$RUNNER_TEMP/app.iconset" -o "$RUNNER_TEMP/app.icns"
+      - name: Configure optional macOS signing and notarization
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.MACOS_APPLE_PASSWORD }}
+          TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+        run: |
+          if [[ -z "$CERTIFICATE" ]]; then
+            echo "No macOS certificate configured; creating unsigned packages."
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/release.keychain-db"
+          keychain_key=$(uuidgen)
+          echo "::add-mask::$keychain_key"
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security create-keychain -p "$keychain_key" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_key" "$keychain"
+          security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_key" "$keychain"
+          xcrun notarytool store-credentials release-notary --keychain "$keychain" \
+            --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APPLE_PASSWORD"
+          echo "MACOS_SIGNING_ENABLED=true" >> "$GITHUB_ENV"
       - name: Package application
         shell: pwsh
         env:
           VERSION: ${{ needs.verify.outputs.version }}
           RID: ${{ matrix.rid }}
           MAIN_EXE: ${{ matrix.executable }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE_PFX }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          MACOS_APP_IDENTITY: ${{ secrets.MACOS_SIGN_APP_IDENTITY }}
+          MACOS_INSTALL_IDENTITY: ${{ secrets.MACOS_SIGN_INSTALL_IDENTITY }}
         run: |
           $arguments = @(
             "pack", "--packId", "SlideDevPresenter", "--packVersion", $env:VERSION,
@@ -86,11 +128,39 @@ jobs:
           )
           if ($IsWindows) {
             $arguments += @("--icon", "src/SlideDevPresenter.App/Assets/appicon.ico", "--framework", "webview2")
+            if ($env:WINDOWS_CERTIFICATE) {
+              $certificatePath = Join-Path $env:RUNNER_TEMP "signing.pfx"
+              [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+              $importOptions = @{
+                FilePath = $certificatePath
+                CertStoreLocation = "Cert:\CurrentUser\My"
+                Password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+              }
+              $certificate = Import-PfxCertificate @importOptions
+              $arguments += @("--signParams", "/sha1 $($certificate.Thumbprint) /fd SHA256 /tr http://timestamp.digicert.com /td SHA256")
+            }
           } else {
-            $arguments += @("--bundleId", "com.norschel.slidedevpresenter")
+            $arguments += @("--bundleId", "com.norschel.slidedevpresenter", "--icon", (Join-Path $env:RUNNER_TEMP "app.icns"))
+            if ($env:MACOS_SIGNING_ENABLED -eq "true") {
+              if (!$env:MACOS_APP_IDENTITY -or !$env:MACOS_INSTALL_IDENTITY) {
+                throw "Both macOS signing identities must be configured."
+              }
+              $arguments += @(
+                "--signAppIdentity", $env:MACOS_APP_IDENTITY, "--signInstallIdentity", $env:MACOS_INSTALL_IDENTITY,
+                "--notaryProfile", "release-notary", "--keychain", (Join-Path $env:RUNNER_TEMP "release.keychain-db")
+              )
+            }
           }
           vpk @arguments
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Remove temporary signing credentials
+        if: always()
+        shell: pwsh
+        run: |
+          Remove-Item (Join-Path $env:RUNNER_TEMP "signing.p12"), (Join-Path $env:RUNNER_TEMP "signing.pfx") -ErrorAction SilentlyContinue
+          if ($IsMacOS -and (Test-Path (Join-Path $env:RUNNER_TEMP "release.keychain-db"))) {
+            security delete-keychain (Join-Path $env:RUNNER_TEMP "release.keychain-db")
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.rid }}
