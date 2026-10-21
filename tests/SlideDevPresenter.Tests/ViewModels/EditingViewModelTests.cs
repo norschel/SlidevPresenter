@@ -116,6 +116,26 @@ public sealed class EditingViewModelTests
     }
 
     [Fact]
+    public void Edit_ResolvesRelativeProjectLocation()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.Editing.Enabled = true;
+        var editor = new FakeCodeEditorService();
+        var vm = CreateMain(settings, editor);
+        vm.SelectedProject = new PresentationProjectViewModel(new PresentationProject
+        {
+            Id = Guid.NewGuid(),
+            Name = "Slides",
+            SourceType = PresentationSourceType.LocalProject,
+            Location = "./talk"
+        });
+
+        vm.EditSelectedProjectCommand.Execute(null);
+
+        Assert.Equal(Path.GetFullPath("./talk"), editor.OpenedDirectory);
+    }
+
+    [Fact]
     public void Edit_RemoteOrNoSelectionCannotLaunchAndLeavesHiddenTab()
     {
         var settings = new FakeSettingsService();

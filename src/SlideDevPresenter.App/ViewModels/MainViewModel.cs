@@ -275,7 +275,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         try
         {
-            _codeEditorService.OpenProject(SourceScanner.ExpandHomePath(project.Location), _settingsService.Settings.Editing.Edition);
+            _codeEditorService.OpenProject(Path.GetFullPath(SourceScanner.ExpandHomePath(project.Location)), _settingsService.Settings.Editing.Edition);
             LibraryMessage = null;
         }
         catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)

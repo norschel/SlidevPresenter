@@ -36,6 +36,9 @@ public sealed class CodeEditorServiceTests : IDisposable
     public void GetAvailableEditions_DetectsPathEditionsIndependently(
         string platform, string stable, string insiders)
     {
+        if (OperatingSystem.IsWindows() && platform != "windows")
+            throw Xunit.Sdk.SkipException.ForSkip("Unix path semantics are unavailable on Windows.");
+
         var bin = Path.Combine(_root, "bin");
         _environment["PATH"] = bin;
         var service = Create(Platform(platform));
@@ -92,6 +95,8 @@ public sealed class CodeEditorServiceTests : IDisposable
     [InlineData(true, true)]
     public void Mac_DetectsBothAppBundlesWithoutPath(bool userInstallation, bool bundledCli)
     {
+        SkipOnWindows();
+
         var root = userInstallation ? Path.Combine(_environment["HOME"]!, "Applications") : "/Applications";
         foreach (var edition in Enum.GetValues<CodeEditorEdition>())
         {
@@ -115,6 +120,8 @@ public sealed class CodeEditorServiceTests : IDisposable
     [InlineData("/opt/visual-studio-code/code", CodeEditorEdition.Stable)]
     public void Linux_DetectsCommonInstallations(string executable, CodeEditorEdition edition)
     {
+        SkipOnWindows();
+
         _executables.Add(executable);
         Assert.Equal([edition], Create(OSPlatform.Linux).GetAvailableEditions());
     }
@@ -122,6 +129,8 @@ public sealed class CodeEditorServiceTests : IDisposable
     [Fact]
     public void Linux_DetectsUserLocalInstallation()
     {
+        SkipOnWindows();
+
         _executables.Add(Path.Combine(_environment["HOME"]!, ".local", "bin", "code-insiders"));
         Assert.Equal([CodeEditorEdition.Insiders], Create(OSPlatform.Linux).GetAvailableEditions());
     }
@@ -129,6 +138,8 @@ public sealed class CodeEditorServiceTests : IDisposable
     [Fact]
     public void Path_IgnoresEmptyAndRelativeEntriesAndChecksAllDirectories()
     {
+        SkipOnWindows();
+
         _environment["PATH"] = $":relative:{Path.Combine(_root, "first")}:{Path.Combine(_root, "second")}";
         _executables.UnionWith(["code", Path.Combine("relative", "code"),
             Path.Combine(_root, "second", "code-insiders")]);
@@ -138,6 +149,8 @@ public sealed class CodeEditorServiceTests : IDisposable
     [Fact]
     public void OpenProject_PreservesSpecialCharactersAsOneArgumentWithoutShell()
     {
+        SkipOnWindows();
+
         var project = Path.Combine(_root, "-talk with spaces & $(echo injected); 'quote'");
         Directory.CreateDirectory(project);
         _executables.Add("/usr/bin/code");
@@ -190,6 +203,8 @@ public sealed class CodeEditorServiceTests : IDisposable
     [Fact]
     public void OpenProject_ResolvesAvailabilityAgainAndNeverFallsBackToAnotherEdition()
     {
+        SkipOnWindows();
+
         _executables.UnionWith(["/usr/bin/code", "/usr/bin/code-insiders"]);
         var service = Create(OSPlatform.Linux);
         Assert.Equal(2, service.GetAvailableEditions().Count);
@@ -206,6 +221,8 @@ public sealed class CodeEditorServiceTests : IDisposable
     [Fact]
     public void OpenProject_DetectsNewlyInstalledEditor()
     {
+        SkipOnWindows();
+
         var service = Create(OSPlatform.Linux);
         Assert.Empty(service.GetAvailableEditions());
         _executables.Add("/usr/bin/code");
@@ -216,6 +233,8 @@ public sealed class CodeEditorServiceTests : IDisposable
     [Fact]
     public void OpenProject_WrapsLaunchFailureWithUsefulContext()
     {
+        SkipOnWindows();
+
         _executables.Add("/usr/bin/code-insiders");
         var failure = new Win32Exception("Permission denied");
         var service = new CodeEditorService(OSPlatform.Linux, EnvironmentValue, _executables.Contains,
@@ -232,6 +251,12 @@ public sealed class CodeEditorServiceTests : IDisposable
 
     private CodeEditorService Create(OSPlatform platform) =>
         new(platform, EnvironmentValue, _executables.Contains, _launches.Add);
+
+    private static void SkipOnWindows()
+    {
+        if (OperatingSystem.IsWindows())
+            throw Xunit.Sdk.SkipException.ForSkip("Unix path semantics are unavailable on Windows.");
+    }
 
     private string? EnvironmentValue(string name) => _environment.GetValueOrDefault(name);
 
