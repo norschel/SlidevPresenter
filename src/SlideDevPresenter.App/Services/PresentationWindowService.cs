@@ -40,6 +40,10 @@ public sealed class PresentationWindowService : IPresentationWindowService
         return Task.CompletedTask;
     }
 
+    public bool IsParticipantWindowOpen => _participantWindow is not null;
+
+    public void DispatchPresentationKey(Avalonia.Input.Key key) => _participantWindow?.DispatchPresentationKey(key);
+
     public Task SwapDisplaysAsync(CancellationToken cancellationToken = default)
     {
         Dispatcher.UIThread.Post(SwapDisplaysOnUiThread);

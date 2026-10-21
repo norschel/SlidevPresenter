@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private readonly IThemeService _themeService;
     private readonly IExternalBrowserLauncher _browserLauncher;
     private readonly WebViewNavigationPolicy _navigationPolicy;
+    private readonly PresentationWindowService? _presentationWindowService;
     private readonly List<KeyBinding> _presentationKeyBindings = [];
 
     // Native WebView controls render in their own OS airspace and ignore a collapsed Avalonia
@@ -49,9 +50,11 @@ public partial class MainWindow : Window
         IShortcutService? shortcutService = null,
         IThemeService? themeService = null,
         IExternalBrowserLauncher? browserLauncher = null,
-        WebViewNavigationPolicy? navigationPolicy = null)
+        WebViewNavigationPolicy? navigationPolicy = null,
+        PresentationWindowService? presentationWindowService = null)
     {
         _viewModel = viewModel;
+        _presentationWindowService = presentationWindowService;
         viewModel.ConfirmRepositoryUpdateAsync = ConfirmRepositoryUpdateAsync;
         _shortcutService = shortcutService ?? new ShortcutService(new RuntimePlatformInfo());
         _themeService = themeService ?? new ThemeService();
@@ -491,10 +494,34 @@ public partial class MainWindow : Window
 
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
-        if (TryHandlePresentationKey(e))
+        if (TryForwardKeyToParticipant(e) || TryHandlePresentationKey(e))
             return;
 
         TryHandleEscape(e);
+    }
+
+    // Keys a native WebView already handled never reach here; Slidev syncs navigation to the presenter view.
+    private bool TryForwardKeyToParticipant(KeyEventArgs e)
+    {
+        if ((e.Handled && e.Key != Key.Space) || _presentationWindowService?.IsParticipantWindowOpen != true
+            || e.Source is TextBox or NativeWebView
+            || (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) != 0)
+            return false;
+
+        Key? key = e.Key switch
+        {
+            Key.B or Key.W or Key.N or Key.P or Key.OemPeriod or Key.Decimal => e.Key,
+            Key.Right or Key.Down or Key.PageDown or Key.Enter => Key.N,
+            Key.Left or Key.Up or Key.PageUp or Key.Back => Key.P,
+            Key.Space => e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? Key.P : Key.N,
+            _ => null
+        };
+        if (key is null)
+            return false;
+
+        e.Handled = true;
+        _presentationWindowService.DispatchPresentationKey(key.Value);
+        return true;
     }
 
     private void OnWebViewKeyDown(object? sender, KeyEventArgs e)
@@ -529,7 +556,12 @@ public partial class MainWindow : Window
     private void OnWebViewWebMessageReceived(object? sender, WebMessageReceivedEventArgs e)
     {
         if (ReferenceEquals(sender, EmbeddedWebView) && WebViewKeyboardBridge.GetBlankState(e.Body) is bool isBlanked)
+        {
             _isPresentationBlanked = isBlanked;
+            // The blank overlay is injected per page and not synced by Slidev, so mirror it to the participant view.
+            _presentationWindowService?.DispatchPresentationKey(!isBlanked ? Key.Escape
+                : WebViewKeyboardBridge.IsWhiteBlankMessage(e.Body) ? Key.W : Key.B);
+        }
 
         if (WebViewKeyboardBridge.IsEscapeMessage(e.Body))
             HandleEscape();
