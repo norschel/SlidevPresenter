@@ -66,9 +66,9 @@
                             <CheckBox Content="Enabled" IsChecked="{Binding SelectedSource.IsEnabled}" IsEnabled="{Binding SelectedSource.CanEnable}"/>
                             <TextBlock Text="Checkout folder (optional)" IsVisible="{Binding SelectedSource.IsRepository}"/>
                             <TextBox Text="{Binding SelectedSource.CheckoutPath}" IsVisible="{Binding SelectedSource.IsRepository}"/>
-                            <TextBlock Text="Branch (optional)" IsVisible="{Binding SelectedSource.IsRepository}"/>
-                            <AutoCompleteBox Text="{Binding SelectedSource.Branch, Mode=TwoWay}" ItemsSource="{Binding Branches}" IsVisible="{Binding SelectedSource.IsRepository}" IsEnabled="{Binding SelectedSource.CanEnable}"/>
-                            <Button Content="Load branches" Command="{Binding LoadBranchesCommand}" IsVisible="{Binding SelectedSource.IsRepository}"/>
+                            <TextBlock Text="Branch (optional)" IsVisible="{Binding SelectedSource.ShowBranch}"/>
+                            <AutoCompleteBox Text="{Binding SelectedSource.Branch, Mode=TwoWay}" ItemsSource="{Binding Branches}" IsVisible="{Binding SelectedSource.ShowBranch}" IsEnabled="{Binding SelectedSource.CanEnable}"/>
+                            <Button Content="Load branches" Command="{Binding LoadBranchesCommand}" IsVisible="{Binding SelectedSource.ShowBranch}"/>
                             <TextBlock Text="Comment"/>
                             <TextBox Text="{Binding SelectedSource.Comment}"/>
                             <CheckBox Content="Public" IsChecked="{Binding SelectedSource.IsPublic}" IsVisible="{Binding !SelectedSource.IsLocal}"/>

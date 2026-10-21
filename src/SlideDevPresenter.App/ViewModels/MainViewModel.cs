@@ -54,7 +54,10 @@ public sealed partial class MainViewModel : ObservableObject
     private string? _selectedBranch;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsRepositoryProjectSelected))]
+    [NotifyPropertyChangedFor(nameof(CanChangeSelectedBranch))]
+    private bool _isRepositoryProjectSelected;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanChangeSelectedBranch))]
     [NotifyPropertyChangedFor(nameof(CanExportPdf))]
     [NotifyPropertyChangedFor(nameof(CanRemoveSelectedProject))]
@@ -193,7 +196,6 @@ public sealed partial class MainViewModel : ObservableObject
     /// Browser ribbon is not the active tab; otherwise it keeps painting over the other workspaces.
     /// </summary>
     public bool IsBrowserSurfaceVisible => IsBrowserRibbonSelected && HasBrowserTabs;
-    public bool IsRepositoryProjectSelected => GetRepositorySource(SelectedProject) is not null;
     public bool CanChangeSelectedBranch => IsRepositoryProjectSelected && AvailableBranches.Count > 0
         && !IsRefreshing && HostState == HostState.Idle;
     public Uri BrowserWorkspaceUri => SelectedBrowserTab?.Url ?? AboutBlankUri;
@@ -336,7 +338,8 @@ public sealed partial class MainViewModel : ObservableObject
         if (IsRefreshing)
             return;
         if (HostState is HostState.Starting or HostState.Running
-            && _settingsService.Settings.Sources.Any(source => source.IsEnabled && source.Type is PresentationSourceType.Git or PresentationSourceType.GitHub))
+            && _settingsService.Settings.Sources.Any(source => source.IsEnabled && (source.Type is PresentationSourceType.Git or PresentationSourceType.GitHub
+                || (IsLocalSource(source) && !string.IsNullOrWhiteSpace(source.Branch)))))
         {
             SourceMessage = "Stop the presentation before refreshing repository sources or switching branches.";
             return;
@@ -352,6 +355,35 @@ public sealed partial class MainViewModel : ObservableObject
 
             var projects = new List<PresentationProjectViewModel>();
             bool? gitAvailable = null;
+
+            async Task RestoreDeclinedBranchAsync(PresentationSource source, RepositoryPreparation prepared)
+            {
+                if (!prepared.BranchSwitchDeclined)
+                    return;
+                if (changingSource?.Id == source.Id)
+                {
+                    source.Branch = previousBranch;
+                    SelectedBranch = previousBranch;
+                }
+                else if (IsLocalSource(source))
+                {
+                    // Follow the working copy's current branch instead of asking again on every refresh.
+                    source.Branch = null;
+                }
+                else
+                {
+                    return;
+                }
+                try
+                {
+                    await _settingsService.SaveAsync();
+                }
+                catch (Exception exception)
+                {
+                    messages.Add($"Could not restore the selected branch in settings. {exception.Message}");
+                }
+            }
+
             foreach (var source in sources)
             {
                 if (source.Type is PresentationSourceType.Git or PresentationSourceType.GitHub)
@@ -364,19 +396,7 @@ public sealed partial class MainViewModel : ObservableObject
                         continue;
                     }
                     var prepared = await _gitRepositoryService.PrepareAsync(source, ConfirmRepositoryUpdateAsync);
-                    if (prepared.BranchSwitchDeclined && changingSource?.Id == source.Id)
-                    {
-                        source.Branch = previousBranch;
-                        SelectedBranch = previousBranch;
-                        try
-                        {
-                            await _settingsService.SaveAsync();
-                        }
-                        catch (Exception exception)
-                        {
-                            messages.Add($"Could not restore the selected branch in settings. {exception.Message}");
-                        }
-                    }
+                    await RestoreDeclinedBranchAsync(source, prepared);
                     if (prepared.Message is not null)
                         messages.Add(prepared.Message);
                     if (prepared.Directory is not null)
@@ -410,11 +430,30 @@ public sealed partial class MainViewModel : ObservableObject
                     continue;
                 }
 
+                if (IsLocalSource(source) && !string.IsNullOrWhiteSpace(source.Branch))
+                {
+                    gitAvailable ??= await _gitRepositoryService.IsGitAvailableAsync();
+                    if (!gitAvailable.Value)
+                    {
+                        if (!messages.Contains(GitRepositoryService.InstallHint))
+                            messages.Add(GitRepositoryService.InstallHint);
+                    }
+                    else
+                    {
+                        var prepared = await _gitRepositoryService.PrepareAsync(source, ConfirmRepositoryUpdateAsync);
+                        await RestoreDeclinedBranchAsync(source, prepared);
+                        if (prepared.Message is not null)
+                            messages.Add(prepared.Message);
+                        if (prepared.Directory is null)
+                            continue;
+                    }
+                }
+
                 switch (source.Type)
                 {
                     case PresentationSourceType.LocalRoot:
                         var scanned = await Task.Run(() => _sourceScanner.ScanRoot(source.Location));
-                        projects.AddRange(scanned.Select(p => new PresentationProjectViewModel(p)));
+                        projects.AddRange(scanned.Select(p => new PresentationProjectViewModel(p, source.Id)));
                         if (scanned.Count == 0)
                             messages.Add($"{source.Name}: No Slidev presentations found in {source.Location}. A presentation folder needs slides.md, a .slidev folder, or a package.json referencing Slidev.");
                         break;
@@ -431,7 +470,7 @@ public sealed partial class MainViewModel : ObservableObject
                                 SourceType = PresentationSourceType.LocalProject,
                                 Location = expanded,
                                 SlidesFilePath = File.Exists(slides) ? slides : null
-                            }));
+                            }, source.Id));
                         }
                         else
                         {
@@ -473,10 +512,13 @@ public sealed partial class MainViewModel : ObservableObject
         return new Guid(System.Security.Cryptography.SHA256.HashData(bytes).AsSpan(0, 16));
     }
 
+    private static bool IsLocalSource(PresentationSource source) =>
+        source.Type is PresentationSourceType.LocalRoot or PresentationSourceType.LocalProject;
+
     private PresentationSource? GetRepositorySource(PresentationProjectViewModel? project) =>
         project?.RepositorySourceId is Guid sourceId
             ? _settingsService.Settings.Sources.FirstOrDefault(source => source.Id == sourceId
-                && source.Type is PresentationSourceType.Git or PresentationSourceType.GitHub)
+                && (source.Type is PresentationSourceType.Git or PresentationSourceType.GitHub || IsLocalSource(source)))
             : null;
 
     private async Task LoadSelectedRepositoryBranchesAsync(PresentationProjectViewModel? project)
@@ -484,24 +526,35 @@ public sealed partial class MainViewModel : ObservableObject
         var version = ++_branchLoadVersion;
         AvailableBranches.Clear();
         SelectedBranch = null;
-        OnPropertyChanged(nameof(IsRepositoryProjectSelected));
-        OnPropertyChanged(nameof(CanChangeSelectedBranch));
+        IsRepositoryProjectSelected = false;
 
         var source = GetRepositorySource(project);
         if (source is null)
             return;
 
-        SelectedBranch = source.Branch;
         try
         {
+            string? currentBranch = null;
+            if (IsLocalSource(source))
+            {
+                currentBranch = await _gitRepositoryService.GetCurrentBranchAsync(source);
+                if (version != _branchLoadVersion || currentBranch is null)
+                    return;
+            }
+
+            IsRepositoryProjectSelected = true;
+            var selected = string.IsNullOrWhiteSpace(source.Branch)
+                ? (string.IsNullOrEmpty(currentBranch) ? null : currentBranch)
+                : source.Branch;
+            SelectedBranch = selected;
             var branches = await _gitRepositoryService.GetBranchesAsync(source);
             if (version != _branchLoadVersion)
                 return;
 
             foreach (var branch in branches)
                 AvailableBranches.Add(branch);
-            if (!string.IsNullOrWhiteSpace(source.Branch) && !AvailableBranches.Contains(source.Branch))
-                AvailableBranches.Insert(0, source.Branch);
+            if (!string.IsNullOrWhiteSpace(selected) && !AvailableBranches.Contains(selected))
+                AvailableBranches.Insert(0, selected);
         }
         catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException or UnauthorizedAccessException)
         {

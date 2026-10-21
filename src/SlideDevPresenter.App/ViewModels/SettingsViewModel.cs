@@ -141,13 +141,49 @@ public sealed partial class SettingsViewModel : ObservableObject
             source.IsGitAvailable = IsGitAvailable;
     }
 
-    partial void OnSelectedSourceChanged(SourceViewModel? value) => Branches.Clear();
+    partial void OnSelectedSourceChanged(SourceViewModel? oldValue, SourceViewModel? newValue)
+    {
+        Branches.Clear();
+        if (oldValue is not null)
+            oldValue.PropertyChanged -= SelectedSource_PropertyChanged;
+        if (newValue is not null)
+        {
+            newValue.PropertyChanged += SelectedSource_PropertyChanged;
+            _ = DetectLocalRepositoryAsync(newValue);
+        }
+    }
+
+    private void SelectedSource_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (sender is SourceViewModel source && e.PropertyName is nameof(SourceViewModel.Location) or nameof(SourceViewModel.Type))
+            _ = DetectLocalRepositoryAsync(source);
+    }
+
+    private async Task DetectLocalRepositoryAsync(SourceViewModel source)
+    {
+        if (!source.IsLocal || string.IsNullOrWhiteSpace(source.Location))
+        {
+            source.IsLocalGitRepository = false;
+            return;
+        }
+        try
+        {
+            var currentBranch = await _gitRepositoryService.GetCurrentBranchAsync(source.ToModel());
+            source.IsLocalGitRepository = currentBranch is not null;
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            source.IsLocalGitRepository = false;
+        }
+        if (source.IsLocalGitRepository && SelectedSource == source && IsGitAvailable)
+            await LoadBranchesAsync();
+    }
 
     [RelayCommand(CanExecute = nameof(IsGitAvailable))]
     private async Task LoadBranchesAsync()
     {
         Branches.Clear();
-        if (SelectedSource?.IsRepository != true)
+        if (SelectedSource?.ShowBranch != true)
             return;
         try
         {
