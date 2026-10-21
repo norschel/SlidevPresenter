@@ -1026,7 +1026,7 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsBrowserSurfaceVisible));
         OnPropertyChanged(nameof(BrowserWorkspaceUri));
         if (SelectedRibbonTab == "Browser")
-            SelectedRibbonTab = "Presentation";
+            SelectedRibbonTab = "Home";
     }
 
     private void TryOpenBrowser(string? url)

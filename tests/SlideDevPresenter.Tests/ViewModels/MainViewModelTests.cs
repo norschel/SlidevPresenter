@@ -1313,7 +1313,7 @@ public class MainViewModelTests
     }
 
     [Fact]
-    public async Task StopAsync_WhenBrowserRibbonSelected_SwitchesToPresentationRibbon()
+    public async Task StopAsync_WhenBrowserRibbonSelected_SwitchesToHomeRibbon()
     {
         var host = new FakeProcessHost();
         var vm = CreateViewModel(host: host);
@@ -1325,7 +1325,7 @@ public class MainViewModelTests
 
         await vm.StopAsync();
 
-        Assert.Equal("Presentation", vm.SelectedRibbonTab);
+        Assert.Equal("Home", vm.SelectedRibbonTab);
         Assert.False(vm.IsBrowserRibbonSelected);
         Assert.True(vm.IsNormalWorkspaceVisible);
     }
@@ -1351,7 +1351,7 @@ public class MainViewModelTests
         windowService.SimulatePresentationExited();
 
         Assert.Empty(vm.BrowserTabs);
-        Assert.Equal("Presentation", vm.SelectedRibbonTab);
+        Assert.Equal("Home", vm.SelectedRibbonTab);
         Assert.False(vm.IsBrowserRibbonSelected);
     }
 

@@ -555,8 +555,8 @@ public partial class MainWindow : Window
         {
             // When no presentation is running but the user is trapped on the Browser tab
             // (e.g. because they closed the participant window via the X button), ESC
-            // switches back to the Presentation ribbon so the NativeWebView is unloaded.
-            _viewModel.SelectPresentationRibbon();
+            // switches back to the Home ribbon so the NativeWebView is unloaded.
+            _viewModel.SelectHomeRibbon();
             return true;
         }
 
