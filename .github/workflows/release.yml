@@ -101,9 +101,15 @@ jobs:
           keychain_key=$(uuidgen)
           echo "::add-mask::$keychain_key"
           printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security list-keychains -d user | sed 's/^[[:space:]]*"//; s/"[[:space:]]*$//' > "$RUNNER_TEMP/original-keychains"
           security create-keychain -p "$keychain_key" "$keychain"
           security set-keychain-settings -lut 21600 "$keychain"
           security unlock-keychain -p "$keychain_key" "$keychain"
+          keychains=()
+          while IFS= read -r existing; do
+            keychains+=("$existing")
+          done < "$RUNNER_TEMP/original-keychains"
+          security list-keychains -d user -s "$keychain" "${keychains[@]}"
           security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_key" "$keychain"
           xcrun notarytool store-credentials release-notary --keychain "$keychain" \
@@ -158,8 +164,15 @@ jobs:
         shell: pwsh
         run: |
           Remove-Item (Join-Path $env:RUNNER_TEMP "signing.p12"), (Join-Path $env:RUNNER_TEMP "signing.pfx") -ErrorAction SilentlyContinue
-          if ($IsMacOS -and (Test-Path (Join-Path $env:RUNNER_TEMP "release.keychain-db"))) {
-            security delete-keychain (Join-Path $env:RUNNER_TEMP "release.keychain-db")
+          if ($IsMacOS) {
+            $originalKeychains = Join-Path $env:RUNNER_TEMP "original-keychains"
+            if (Test-Path $originalKeychains) {
+              $keychains = @(Get-Content $originalKeychains)
+              security list-keychains -d user -s @keychains
+            }
+            if (Test-Path (Join-Path $env:RUNNER_TEMP "release.keychain-db")) {
+              security delete-keychain (Join-Path $env:RUNNER_TEMP "release.keychain-db")
+            }
           }
       - uses: actions/upload-artifact@v4
         with:
