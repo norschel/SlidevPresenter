@@ -409,6 +409,8 @@ public sealed partial class MainViewModel : ObservableObject
                     case PresentationSourceType.LocalRoot:
                         var scanned = await Task.Run(() => _sourceScanner.ScanRoot(source.Location));
                         projects.AddRange(scanned.Select(p => new PresentationProjectViewModel(p)));
+                        if (scanned.Count == 0)
+                            messages.Add($"{source.Name}: No Slidev presentations found in {source.Location}. A presentation folder needs slides.md, a .slidev folder, or a package.json referencing Slidev.");
                         break;
 
                     case PresentationSourceType.LocalProject:
@@ -424,6 +426,10 @@ public sealed partial class MainViewModel : ObservableObject
                                 Location = expanded,
                                 SlidesFilePath = File.Exists(slides) ? slides : null
                             }));
+                        }
+                        else
+                        {
+                            messages.Add($"{source.Name}: {source.Location} is not a Slidev presentation. It needs slides.md, a .slidev folder, or a package.json referencing Slidev.");
                         }
                         break;
 
