@@ -2,6 +2,26 @@
 
 SlideDevPresenter is a local desktop host for Slidev presentations. It provides a PowerPoint-like experience for developers by combining a presentation library, Slidev process hosting, embedded Presenter View, participant display management, settings, thumbnails, agenda, and timer support.
 
+## Install and Update
+
+Download an installer from [GitHub Releases](https://github.com/norschel/SlidevPresenter/releases/latest):
+
+- **Windows x64**: run the `win-x64` Setup executable. Installation is per-user; the installer also checks for the Microsoft Edge WebView2 runtime used by the embedded browser.
+- **macOS Intel**: choose the `osx-x64` installer.
+- **macOS Apple Silicon**: choose the `osx-arm64` installer.
+
+The .NET runtime is included. Node.js and the presentation's package manager are still required for local presentations; Git is required only for repository sources. Settings and checkouts are stored outside the installation and are retained during updates.
+
+Open **About > Check for updates**, then **Download update**, then **Restart and install**. Restarting stops the current presentation and saves settings first. Updates come only from published stable releases in this repository, matching the installed platform/architecture. Nothing is downloaded or restarted automatically. Development builds do not enable in-app updates. If an update fails, retry or run the latest installer for the same architecture.
+
+### Publishing a Release
+
+Push a stable version tag such as `v1.2.3`. The **Package desktop release** workflow builds and tests the solution, then packages self-contained Windows x64 and macOS x64/arm64 apps with Velopack. The tag supplies both the application and package version; tags with prerelease suffixes are rejected.
+
+The workflow creates a **draft** GitHub Release after all three packages succeed. Review the notes and test installation, launch, embedded browser, uninstall, and an update from the previous version on each platform before publishing the draft. Reruns can replace draft assets, but refuse to overwrite a published release. Keep all generated assets attached, including update feeds (`releases.*.json`) and full `.nupkg` packages: the in-app updater needs them. Channels are `win-x64`, `osx-x64`, and `osx-arm64`; do not rename channels or the package ID between releases. Full packages are used, so no previous release is needed when packaging.
+
+**Signing:** the default workflow produces unsigned installers and does not bypass OS security checks. Windows may show SmartScreen warnings; macOS may block unsigned/unnotarized apps. For trusted public distribution, configure Windows Authenticode signing and Apple Developer ID signing/notarization in the packaging step before publishing. Keep certificates, passwords, and Apple credentials in GitHub Actions secrets, never in the repository. See [Velopack Windows signing](https://docs.velopack.io/packaging/windows/code-signing) and [macOS packaging](https://docs.velopack.io/packaging/osx). Signed/notarized installers still need native-platform verification; a successful cross-publish alone does not verify installation or updating.
+
 ## Presentation Sources
 
 Open **Library > Sources...** (or **Settings > Sources**) to add, edit, disable or remove sources, then select **Save**. Supported types:

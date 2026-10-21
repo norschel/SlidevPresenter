@@ -1,0 +1,126 @@
+name: Package desktop release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  VELOPACK_VERSION: '1.2.161'
+  APP_PROJECT: src/SlideDevPresenter.App/SlideDevPresenter.App.csproj
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Validate stable release tag
+        id: version
+        shell: bash
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Release tags must be vMAJOR.MINOR.PATCH (no prerelease suffix)."
+            exit 1
+          fi
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - run: dotnet restore SlideDevPresenter.sln
+      - run: dotnet build SlideDevPresenter.sln --configuration Release --no-restore
+      - run: dotnet test SlideDevPresenter.sln --configuration Release --no-build
+
+  package:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            rid: win-x64
+            executable: SlideDevPresenter.App.exe
+          - runner: macos-15
+            rid: osx-x64
+            executable: SlideDevPresenter.App
+          - runner: macos-15
+            rid: osx-arm64
+            executable: SlideDevPresenter.App
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install packaging tool
+        run: dotnet tool install --global vpk --version ${{ env.VELOPACK_VERSION }}
+      - name: Publish self-contained application
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+          RID: ${{ matrix.rid }}
+        run: |
+          dotnet publish $env:APP_PROJECT --configuration Release --runtime $env:RID --self-contained true `
+            -p:Version=$env:VERSION -p:PublishSingleFile=false -p:PublishTrimmed=false --output publish
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package application
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+          RID: ${{ matrix.rid }}
+          MAIN_EXE: ${{ matrix.executable }}
+        run: |
+          $arguments = @(
+            "pack", "--packId", "SlideDevPresenter", "--packVersion", $env:VERSION,
+            "--packDir", "publish", "--mainExe", $env:MAIN_EXE,
+            "--packTitle", "SlideDevPresenter", "--runtime", $env:RID,
+            "--channel", $env:RID, "--outputDir", "Releases", "--delta", "None"
+          )
+          if ($IsWindows) {
+            $arguments += @("--icon", "src/SlideDevPresenter.App/Assets/appicon.ico", "--framework", "webview2")
+          } else {
+            $arguments += @("--bundleId", "com.norschel.slidedevpresenter")
+          }
+          vpk @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.rid }}
+          path: Releases/*
+          if-no-files-found: error
+
+  release:
+    needs: [verify, package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: release-assets
+          merge-multiple: true
+      - name: Upload installers and update feeds to a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != "true" ]]; then
+              echo "Refusing to overwrite a published release."
+              exit 1
+            fi
+          else
+            gh release create "$TAG" --verify-tag --draft --title "SlideDevPresenter $TAG" --generate-notes
+          fi
+          gh release upload "$TAG" release-assets/* --clobber

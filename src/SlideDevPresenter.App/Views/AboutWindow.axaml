@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SlideDevPresenter.App.ViewModels"
         x:Class="SlideDevPresenter.App.Views.AboutWindow"
         Width="420"
         SizeToContent="Height"
@@ -19,6 +20,11 @@
         <StackPanel Spacing="4">
             <HyperlinkButton Content="GitHub repository" NavigateUri="https://github.com/norschel/SlidevPresenter" Padding="0"/>
             <HyperlinkButton Content="Slidev website" NavigateUri="https://sli.dev" Padding="0"/>
+            <HyperlinkButton Content="Download releases" NavigateUri="https://github.com/norschel/SlidevPresenter/releases/latest" Padding="0"/>
+        </StackPanel>
+        <StackPanel x:Name="UpdatePanel" x:DataType="vm:AppUpdateViewModel" Spacing="8">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+            <Button Content="{Binding ButtonText}" Command="{Binding UpdateCommand}"/>
         </StackPanel>
         <Button Content="Close" HorizontalAlignment="Right" IsDefault="True" IsCancel="True" Click="Close_Click"/>
     </StackPanel>

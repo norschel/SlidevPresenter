@@ -82,7 +82,20 @@ public partial class MainWindow : Window
 
     private async void About_Click(object? sender, RoutedEventArgs e)
     {
-        await new AboutWindow(_viewModel?.AppVersion ?? "unknown").ShowDialog(this);
+        var updates = new AppUpdateViewModel(new AppUpdateService(), async () =>
+        {
+            if (_viewModel is not null)
+            {
+                await _viewModel.StopAsync();
+                await _viewModel.SettingsService.SaveAsync();
+            }
+        }, () =>
+        {
+            if (Avalonia.Application.Current?.ApplicationLifetime is
+                Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+                desktop.Shutdown();
+        });
+        await new AboutWindow(_viewModel?.AppVersion ?? "unknown", updates).ShowDialog(this);
     }
 
     private async void Branch_SelectionChanged(object? sender, SelectionChangedEventArgs e)
