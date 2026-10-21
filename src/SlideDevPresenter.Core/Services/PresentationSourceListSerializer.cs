@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using SlideDevPresenter.Core.Models;
 
 namespace SlideDevPresenter.Core.Services;
@@ -121,7 +122,7 @@ public static class PresentationSourceListSerializer
             {
                 Title = string.IsNullOrWhiteSpace(source.Name) ? remote : source.Name,
                 Address = remote,
-                Branch = source.Branch,
+                Branch = string.IsNullOrWhiteSpace(source.Branch) ? null : source.Branch.Trim(),
                 Type = source.Type == PresentationSourceType.Git ? "git" : "github-repository",
                 Comment = source.Comment,
                 IsPublic = source.IsPublic,
@@ -211,6 +212,7 @@ public static class PresentationSourceListSerializer
 
     private sealed class SourceListEntry
     {
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Branch { get; init; }
         public required string Title { get; init; }
         public required string Address { get; init; }

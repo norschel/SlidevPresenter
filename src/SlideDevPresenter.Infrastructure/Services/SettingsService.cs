@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Microsoft.Extensions.Logging;
 using SlideDevPresenter.Core.Models;
 using SlideDevPresenter.Core.Services;
@@ -13,8 +14,24 @@ public sealed class SettingsService : ISettingsService
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver { Modifiers = { OmitRemoteOnlySourceProperties } }
     };
+
+    private static void OmitRemoteOnlySourceProperties(JsonTypeInfo typeInfo)
+    {
+        if (typeInfo.Type != typeof(PresentationSource))
+            return;
+
+        foreach (var property in typeInfo.Properties)
+        {
+            if (property.Name is "isPublic" or "requiresAuthentication")
+                property.ShouldSerialize = (source, _) => !IsLocal(((PresentationSource)source).Type);
+        }
+    }
+
+    private static bool IsLocal(PresentationSourceType type) =>
+        type is PresentationSourceType.LocalRoot or PresentationSourceType.LocalProject;
 
     private readonly string _settingsFilePath;
     private readonly ILogger<SettingsService> _logger;

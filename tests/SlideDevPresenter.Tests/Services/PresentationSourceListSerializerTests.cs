@@ -70,6 +70,7 @@ public sealed class PresentationSourceListSerializerTests
         Assert.Equal("Team deck", entry.GetProperty("comment").GetString());
         Assert.False(entry.GetProperty("isPublic").GetBoolean());
         Assert.True(entry.GetProperty("requiresAuthentication").GetBoolean());
+        Assert.False(entry.TryGetProperty("branch", out _));
 
         var json = Encoding.UTF8.GetString(stream.ToArray());
         Assert.DoesNotContain("access_token", json);
