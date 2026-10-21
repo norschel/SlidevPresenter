@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using SlideDevPresenter.App.Services;
 
 namespace SlideDevPresenter.App.Views;
@@ -53,6 +54,28 @@ public partial class ParticipantWindow : Window
     {
         _isFullscreenRequested = true;
         WindowState = WindowState.FullScreen;
+    }
+
+    /// <summary>Moves the window to <paramref name="position"/> without treating the fullscreen exit as a user exit.</summary>
+    public void MoveTo(PixelPoint position)
+    {
+        var wasFullscreen = _isFullscreenRequested;
+        _isFullscreenRequested = false;
+
+        if (WindowState != WindowState.Normal)
+            WindowState = WindowState.Normal;
+
+        Position = position;
+
+        if (!wasFullscreen)
+            return;
+
+        // Let the platform finish leaving fullscreen (async on macOS) before re-entering it on the new display.
+        Dispatcher.UIThread.Post(() =>
+        {
+            Position = position;
+            SetFullscreen();
+        }, DispatcherPriority.Background);
     }
 
     private void AttachHandlers()

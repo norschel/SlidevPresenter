@@ -88,6 +88,7 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsError))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(StopCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SwapDisplaysCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
     [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
     private HostState _hostState = HostState.Idle;
@@ -734,6 +735,11 @@ public sealed partial class MainViewModel : ObservableObject
 
     private bool CanStop() => HostState is HostState.Starting or HostState.Running;
 
+    [RelayCommand(CanExecute = nameof(CanSwapDisplays))]
+    public Task SwapDisplaysAsync() => _presentationWindowService.SwapDisplaysAsync();
+
+    private bool CanSwapDisplays() => HostState == HostState.Running;
+
     [RelayCommand(CanExecute = nameof(CanResume))]
     public async Task ResumeAsync()
     {
@@ -1216,6 +1222,7 @@ public sealed partial class MainViewModel : ObservableObject
         public event EventHandler<Uri>? ExternalLinkNavigated;
 #pragma warning restore CS0067
         public Task OpenAsync(string participantUrl, string? presenterUrl, DisplayInfo? targetDisplay = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SwapDisplaysAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task CloseAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 

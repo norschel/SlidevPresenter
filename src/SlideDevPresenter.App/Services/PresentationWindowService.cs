@@ -40,6 +40,61 @@ public sealed class PresentationWindowService : IPresentationWindowService
         return Task.CompletedTask;
     }
 
+    public Task SwapDisplaysAsync(CancellationToken cancellationToken = default)
+    {
+        Dispatcher.UIThread.Post(SwapDisplaysOnUiThread);
+        return Task.CompletedTask;
+    }
+
+    private void SwapDisplaysOnUiThread()
+    {
+        if (_participantWindow is null)
+            return;
+
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } mainWindow })
+            return;
+
+        var participantScreen = _participantWindow.Screens.ScreenFromWindow(_participantWindow);
+        var mainScreen = mainWindow.Screens.ScreenFromWindow(mainWindow);
+        if (participantScreen is null || mainScreen is null)
+            return;
+
+        var participantTarget = mainScreen.Bounds;
+        var mainTarget = participantScreen.Bounds;
+
+        // Both windows share a display: send the participant view to another one instead.
+        if (participantScreen.Equals(mainScreen))
+        {
+            var current = _displayService.GetDisplays().FirstOrDefault(d =>
+                DisplayPlacement.Matches(d, mainTarget.X, mainTarget.Y, mainTarget.Width, mainTarget.Height));
+            var alternate = current is null ? null : DisplayPlacement.PickAlternateDisplay(_displayService.GetDisplays(), current);
+            if (alternate is null)
+                return;
+
+            participantTarget = new PixelRect(alternate.X, alternate.Y, alternate.Width, alternate.Height);
+        }
+        else
+        {
+            _mainWindowOrigin ??= (mainWindow.Position, mainWindow.WindowState);
+            MoveWindow(mainWindow, new PixelPoint(mainTarget.X + 40, mainTarget.Y + 40));
+        }
+
+        _participantWindow.MoveTo(new PixelPoint(participantTarget.X + 10, participantTarget.Y + 10));
+    }
+
+    private static void MoveWindow(Window window, PixelPoint position)
+    {
+        // A maximized/fullscreen window cannot be repositioned; normalize, move, then restore the state.
+        var previousState = window.WindowState;
+        if (previousState != WindowState.Normal)
+            window.WindowState = WindowState.Normal;
+
+        window.Position = position;
+
+        if (previousState is WindowState.Maximized or WindowState.FullScreen)
+            window.WindowState = previousState;
+    }
+
     private void OpenOnUiThread(string participantUrl, DisplayInfo? targetDisplay)
     {
         CloseOnUiThread();

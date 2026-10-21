@@ -40,6 +40,7 @@
                         <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsHomeRibbonSelected}">
                             <Button Content="▶ Start" Command="{Binding LaunchCommand}" ToolTip.Tip="Start presentation"/>
                             <Button Content="■ Stop" Command="{Binding StopCommand}"/>
+                            <Button Content="⇄ Swap Displays" Command="{Binding SwapDisplaysCommand}" ToolTip.Tip="Swap the participant view and the app between displays"/>
                             <Button Content="↻ Retry" Command="{Binding RetryCommand}"/>
                             <Button Content="⏎ Resume" Command="{Binding ResumeCommand}" ToolTip.Tip="Resume presentation from last saved position"/>
                             <Button Content="◀ Prev" Click="PreviousSlide_Click" IsVisible="{Binding IsRunning}" IsEnabled="{Binding CanShowEmbeddedSurface}" ToolTip.Tip="Previous slide"/>
@@ -71,6 +72,7 @@
                             <Button x:Name="StartFromCurrentButton" Content="Start Current" Command="{Binding StartFromCurrentSlideCommand}" ToolTip.Tip="Start from selected slide"/>
                             <Button x:Name="StartPresenterViewButton" Content="Presenter View" Command="{Binding StartPresenterViewCommand}" ToolTip.Tip="Start presenter view"/>
                             <Button Content="■ Stop" Command="{Binding StopCommand}" ToolTip.Tip="Stop presentation"/>
+                            <Button Content="⇄ Swap Displays" Command="{Binding SwapDisplaysCommand}" ToolTip.Tip="Swap the participant view and the app between displays"/>
                             <Button Content="↻ Retry" Command="{Binding RetryCommand}" ToolTip.Tip="Retry presentation"/>
                             <Button Content="⏎ Resume" Command="{Binding ResumeCommand}" ToolTip.Tip="Resume presentation from last saved position"/>
                             <Button Content="◀ Prev" Click="PreviousSlide_Click" IsVisible="{Binding IsRunning}" IsEnabled="{Binding CanShowEmbeddedSurface}" ToolTip.Tip="Previous slide"/>

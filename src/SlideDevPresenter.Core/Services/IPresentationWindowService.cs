@@ -16,6 +16,9 @@ public interface IPresentationWindowService
     /// </summary>
     Task OpenAsync(string participantUrl, string? presenterUrl, DisplayInfo? targetDisplay = null, CancellationToken cancellationToken = default);
 
+    /// <summary>Swaps the displays of the participant window and the main window.</summary>
+    Task SwapDisplaysAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Closes all presentation windows.</summary>
     Task CloseAsync(CancellationToken cancellationToken = default);
 }

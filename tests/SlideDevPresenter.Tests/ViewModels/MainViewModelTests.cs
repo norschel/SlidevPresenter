@@ -118,6 +118,14 @@ internal sealed class FakePresentationWindowService : IPresentationWindowService
         return Task.CompletedTask;
     }
 
+    public int SwapCallCount { get; private set; }
+
+    public Task SwapDisplaysAsync(CancellationToken cancellationToken = default)
+    {
+        SwapCallCount++;
+        return Task.CompletedTask;
+    }
+
     public Task CloseAsync(CancellationToken cancellationToken = default)
     {
         CloseCallCount++;
