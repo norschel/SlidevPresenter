@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SlideDevPresenter.App.Services;
 using SlideDevPresenter.Core.Models;
 using SlideDevPresenter.Core.Services;
 using SlideDevPresenter.Infrastructure.Services;
@@ -23,6 +23,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly IGitRepositoryService _gitRepositoryService;
     private int _branchLoadVersion;
     private readonly ICodeEditorService _codeEditorService;
+    private readonly IExternalBrowserLauncher _browserLauncher;
     private IReadOnlyList<CodeEditorEdition> _availableCodeEditors = [];
     public Func<string, Task<bool>> ConfirmRepositoryUpdateAsync { get; set; } = _ => Task.FromResult(false);
 
@@ -233,7 +234,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
     }
 
-    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService, IDisplayService displayService, ISlideDeckPdfExporter? slideDeckPdfExporter = null, IDisplaySelector? displaySelector = null, IGitRepositoryService? gitRepositoryService = null, ICodeEditorService? codeEditorService = null)
+    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService, IDisplayService displayService, ISlideDeckPdfExporter? slideDeckPdfExporter = null, IDisplaySelector? displaySelector = null, IGitRepositoryService? gitRepositoryService = null, ICodeEditorService? codeEditorService = null, IExternalBrowserLauncher? browserLauncher = null)
     {
         _settingsService = settingsService;
         _sourceScanner = sourceScanner;
@@ -245,6 +246,8 @@ public sealed partial class MainViewModel : ObservableObject
         _slideDeckPdfExporter = slideDeckPdfExporter ?? new SlidevPdfExporter();
         _gitRepositoryService = gitRepositoryService ?? new GitRepositoryService();
         _codeEditorService = codeEditorService ?? new CodeEditorService();
+        // No-op by default so headless/test usage never launches the system browser.
+        _browserLauncher = browserLauncher ?? new NullExternalBrowserLauncher();
         _availableCodeEditors = _codeEditorService.GetAvailableEditions();
         _syncContext = SynchronizationContext.Current;
         _selectedSurfaceMode = ParseSurfaceMode(settingsService.Settings.Defaults.DefaultMode);
@@ -961,14 +964,13 @@ public sealed partial class MainViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(url))
             return;
 
-        try
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
         {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            ErrorMessage = $"Could not open browser: invalid address '{url}'.";
+            return;
         }
-        catch (Exception ex)
-        {
-            ErrorMessage = $"Could not open browser: {ex.Message}";
-        }
+
+        _browserLauncher.Open(uri);
     }
 
     private void AutoOpenConfiguredViews()
@@ -1150,6 +1152,11 @@ public sealed partial class MainViewModel : ObservableObject
     private sealed class NullDisplayService : IDisplayService
     {
         public IReadOnlyList<DisplayInfo> GetDisplays() => [];
+    }
+
+    private sealed class NullExternalBrowserLauncher : IExternalBrowserLauncher
+    {
+        public void Open(Uri uri) { }
     }
 
     /// <summary>Headless fallback: behaves like the pre-dialog logic by preferring the first non-primary display.</summary>
