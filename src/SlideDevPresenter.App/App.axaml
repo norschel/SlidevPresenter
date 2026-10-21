@@ -17,6 +17,8 @@
                     <SolidColorBrush x:Key="AppCardBrush" Color="#222222"/>
                     <SolidColorBrush x:Key="AppSurfaceBrush" Color="#101010"/>
                     <SolidColorBrush x:Key="AppTabBarBrush" Color="#1A1A1A"/>
+                    <SolidColorBrush x:Key="AppWindowBrush" Color="#000000"/>
+                    <SolidColorBrush x:Key="AppListBrush" Color="#2B2B2B"/>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="AppChromeBrush" Color="#F3F3F3"/>
@@ -27,6 +29,8 @@
                     <SolidColorBrush x:Key="AppCardBrush" Color="#FFFFFF"/>
                     <SolidColorBrush x:Key="AppSurfaceBrush" Color="#F0F0F0"/>
                     <SolidColorBrush x:Key="AppTabBarBrush" Color="#EBEBEB"/>
+                    <SolidColorBrush x:Key="AppWindowBrush" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="AppListBrush" Color="#F2F2F2"/>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="{x:Static services:ThemeService.Blue}">
                     <SolidColorBrush x:Key="AppChromeBrush" Color="#0F2A4A"/>
@@ -37,7 +41,8 @@
                     <SolidColorBrush x:Key="AppCardBrush" Color="#143657"/>
                     <SolidColorBrush x:Key="AppSurfaceBrush" Color="#071629"/>
                     <SolidColorBrush x:Key="AppTabBarBrush" Color="#0D2541"/>
-                    <SolidColorBrush x:Key="SystemControlBackgroundAltHighBrush" Color="#0A1F38"/>
+                    <SolidColorBrush x:Key="AppWindowBrush" Color="#0A1F38"/>
+                    <SolidColorBrush x:Key="AppListBrush" Color="#102C4C"/>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
@@ -45,5 +50,11 @@
 
     <Application.Styles>
         <FluentTheme />
+        <Style Selector=":is(Window)">
+            <Setter Property="Background" Value="{DynamicResource AppWindowBrush}"/>
+        </Style>
+        <Style Selector="ListBox">
+            <Setter Property="Background" Value="{DynamicResource AppListBrush}"/>
+        </Style>
     </Application.Styles>
 </Application>
