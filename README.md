@@ -23,6 +23,12 @@ For existing checkouts, refresh performs a noninteractive fetch with a timeout. 
 
 Shared library import/export preserves repository source types and excludes local checkout paths. Existing shared lists continue to treat `github` entries as hosted URLs; new GitHub repositories use `github-repository` entries.
 
+## Editing Presentations
+
+In **Settings > Edit**, enable **editing in VS Code** (off by default) and choose **Stable** (regular VS Code) or **Insiders**. Only installed releases are offered; if neither is found, installation guidance is shown. Reopen Settings after installing a release.
+
+Select a local or checked-out Git/GitHub presentation, then use **Edit > Open in VS Code** to open its project folder. The Edit tab is hidden for remote hosted URLs and when editing is disabled or the selected editor is unavailable. Changes are saved by VS Code; start the presentation again to compile the updated deck.
+
 ## Compiling Presentations
 
 Starting a local or repository presentation first installs its dependencies and runs the local Slidev CLI's `build` command. Only after compilation succeeds does the presenter start the Slidev server. Hosted URLs do not need compiling.

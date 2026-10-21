@@ -21,6 +21,8 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly IDisplaySelector _displaySelector;
     private readonly ISlideDeckPdfExporter _slideDeckPdfExporter;
     private readonly IGitRepositoryService _gitRepositoryService;
+    private readonly ICodeEditorService _codeEditorService;
+    private IReadOnlyList<CodeEditorEdition> _availableCodeEditors = [];
     public Func<string, Task<bool>> ConfirmRepositoryUpdateAsync { get; set; } = _ => Task.FromResult(false);
 
     [ObservableProperty]
@@ -47,6 +49,8 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanExportPdf))]
     [NotifyPropertyChangedFor(nameof(CanRemoveSelectedProject))]
+    [NotifyPropertyChangedFor(nameof(ShowEditTab))]
+    [NotifyCanExecuteChangedFor(nameof(EditSelectedProjectCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
     [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
@@ -116,6 +120,7 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsViewRibbonSelected))]
     [NotifyPropertyChangedFor(nameof(IsPresentationRibbonSelected))]
     [NotifyPropertyChangedFor(nameof(IsBrowserRibbonSelected))]
+    [NotifyPropertyChangedFor(nameof(IsEditRibbonSelected))]
     [NotifyPropertyChangedFor(nameof(IsNormalWorkspaceVisible))]
     [NotifyPropertyChangedFor(nameof(IsBrowserSurfaceVisible))]
     [NotifyPropertyChangedFor(nameof(CanShowEmbeddedSurface))]
@@ -164,6 +169,10 @@ public sealed partial class MainViewModel : ObservableObject
     public bool IsViewRibbonSelected => SelectedRibbonTab == "View";
     public bool IsPresentationRibbonSelected => SelectedRibbonTab == "Presentation";
     public bool IsBrowserRibbonSelected => SelectedRibbonTab == "Browser";
+    public bool IsEditRibbonSelected => SelectedRibbonTab == "Edit";
+    public bool ShowEditTab => _settingsService.Settings.Editing.Enabled
+        && _availableCodeEditors.Contains(_settingsService.Settings.Editing.Edition)
+        && SelectedProject is { SourceType: not PresentationSourceType.HostedUrl };
     public bool IsNormalWorkspaceVisible => SelectedRibbonTab != "Browser";
     public bool HasBrowserTabs => BrowserTabs.Count > 0;
     /// <summary>
@@ -212,7 +221,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
     }
 
-    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService, IDisplayService displayService, ISlideDeckPdfExporter? slideDeckPdfExporter = null, IDisplaySelector? displaySelector = null, IGitRepositoryService? gitRepositoryService = null)
+    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService, IDisplayService displayService, ISlideDeckPdfExporter? slideDeckPdfExporter = null, IDisplaySelector? displaySelector = null, IGitRepositoryService? gitRepositoryService = null, ICodeEditorService? codeEditorService = null)
     {
         _settingsService = settingsService;
         _sourceScanner = sourceScanner;
@@ -223,6 +232,8 @@ public sealed partial class MainViewModel : ObservableObject
         _displaySelector = displaySelector ?? new DefaultDisplaySelector();
         _slideDeckPdfExporter = slideDeckPdfExporter ?? new SlidevPdfExporter();
         _gitRepositoryService = gitRepositoryService ?? new GitRepositoryService();
+        _codeEditorService = codeEditorService ?? new CodeEditorService();
+        _availableCodeEditors = _codeEditorService.GetAvailableEditions();
         _syncContext = SynchronizationContext.Current;
         _selectedSurfaceMode = ParseSurfaceMode(settingsService.Settings.Defaults.DefaultMode);
 
@@ -239,11 +250,45 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CanShowEmbeddedSurface));
         OnPropertyChanged(nameof(CanShowBrowserFallback));
         OnPropertyChanged(nameof(EmbeddedSurfaceHint));
+        _availableCodeEditors = _codeEditorService.GetAvailableEditions();
+        OnPropertyChanged(nameof(ShowEditTab));
+        EditSelectedProjectCommand.NotifyCanExecuteChanged();
+        ResetEditTabIfHidden();
     }
 
     partial void OnSelectedProjectChanged(PresentationProjectViewModel? value)
     {
+        ResetEditTabIfHidden();
         _ = LoadSelectedProjectMetadataAsync(value);
+    }
+
+    private void ResetEditTabIfHidden()
+    {
+        if (!ShowEditTab && IsEditRibbonSelected)
+            SelectedRibbonTab = "Home";
+    }
+
+    [RelayCommand(CanExecute = nameof(ShowEditTab))]
+    private void EditSelectedProject()
+    {
+        if (!ShowEditTab || SelectedProject is not { } project)
+            return;
+        try
+        {
+            _codeEditorService.OpenProject(Path.GetFullPath(SourceScanner.ExpandHomePath(project.Location)), _settingsService.Settings.Editing.Edition);
+            LibraryMessage = null;
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            LibraryMessage = $"Could not open VS Code: {exception.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void SelectEditRibbon()
+    {
+        if (ShowEditTab)
+            SelectedRibbonTab = "Edit";
     }
 
     partial void OnSelectedOutlineSlideChanged(SlideDeckSlide? value)

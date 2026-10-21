@@ -14,6 +14,16 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ISettingsService _settingsService;
     private readonly IThemeService _themeService;
     private readonly IGitRepositoryService _gitRepositoryService;
+    private readonly ICodeEditorService _codeEditorService;
+
+    public ObservableCollection<CodeEditorEdition> AvailableCodeEditors { get; } = [];
+    public bool HasCodeEditor => AvailableCodeEditors.Count > 0;
+
+    [ObservableProperty]
+    private bool _editingEnabled;
+
+    [ObservableProperty]
+    private CodeEditorEdition? _selectedCodeEditor;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddGitSourceCommand))]
@@ -103,12 +113,24 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
     }
 
-    public SettingsViewModel(ISettingsService settingsService, IThemeService themeService, IGitRepositoryService? gitRepositoryService = null)
+    public SettingsViewModel(ISettingsService settingsService, IThemeService themeService, IGitRepositoryService? gitRepositoryService = null, ICodeEditorService? codeEditorService = null)
     {
         _settingsService = settingsService;
         _themeService = themeService;
         _gitRepositoryService = gitRepositoryService ?? new GitRepositoryService();
+        _codeEditorService = codeEditorService ?? new CodeEditorService();
         LoadFromSettings(settingsService.Settings);
+    }
+
+    public void RefreshCodeEditors()
+    {
+        var selected = SelectedCodeEditor;
+        AvailableCodeEditors.Clear();
+        foreach (var edition in _codeEditorService.GetAvailableEditions())
+            AvailableCodeEditors.Add(edition);
+        SelectedCodeEditor = selected.HasValue && AvailableCodeEditors.Contains(selected.Value)
+            ? selected : AvailableCodeEditors.Cast<CodeEditorEdition?>().FirstOrDefault();
+        OnPropertyChanged(nameof(HasCodeEditor));
     }
 
     public async Task CheckGitAvailabilityAsync()
@@ -169,6 +191,9 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         OpenExternalLinksInSystemBrowser = settings.Navigation.OpenExternalLinksInSystemBrowser;
         OpenExternalLinksInEmbeddedBrowser = settings.Navigation.OpenExternalLinksInEmbeddedBrowser;
+        EditingEnabled = settings.Editing.Enabled;
+        SelectedCodeEditor = settings.Editing.Edition;
+        RefreshCodeEditors();
     }
 
     public void AddLocalSource(string folderPath)
@@ -298,6 +323,9 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         settings.Navigation.OpenExternalLinksInSystemBrowser = OpenExternalLinksInSystemBrowser;
         settings.Navigation.OpenExternalLinksInEmbeddedBrowser = OpenExternalLinksInEmbeddedBrowser;
+        settings.Editing.Enabled = EditingEnabled;
+        if (SelectedCodeEditor is { } edition)
+            settings.Editing.Edition = edition;
 
         await _settingsService.SaveAsync();
         _themeService.ApplyTheme(Theme);
