@@ -11,7 +11,7 @@
         MinWidth="600"
         MinHeight="420"
         Icon="/Assets/appicon.ico"
-        Title="Settings — SlideDevPresenter"
+        Title="Settings — Slidev presenter"
         WindowStartupLocation="CenterOwner">
 
     <Grid RowDefinitions="*,Auto" Margin="12">

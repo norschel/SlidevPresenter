@@ -12,7 +12,7 @@
         MinWidth="1100"
         MinHeight="700"
         Icon="/Assets/appicon.ico"
-        Title="SlideDevPresenter">
+        Title="Slidev presenter">
     <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="320,*">
 
         <Border Grid.Row="0" Grid.ColumnSpan="2" Background="{DynamicResource AppChromeBrush}" Padding="12" IsVisible="{Binding ShowRibbon}">
