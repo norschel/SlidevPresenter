@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SlideDevPresenter.App.Views.AboutWindow"
+        Width="420"
+        SizeToContent="Height"
+        CanResize="False"
+        Icon="/Assets/appicon.ico"
+        Title="About Slidev presenter"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="24" Spacing="12">
+        <StackPanel Orientation="Horizontal" Spacing="16">
+            <Image Source="/Assets/appicon.ico" Width="48" Height="48"/>
+            <StackPanel VerticalAlignment="Center" Spacing="2">
+                <TextBlock Text="Slidev presenter" FontSize="20" FontWeight="SemiBold"/>
+                <TextBlock x:Name="VersionText" Opacity="0.7"/>
+            </StackPanel>
+        </StackPanel>
+        <TextBlock Text="A desktop host for presenting Slidev slide decks." TextWrapping="Wrap"/>
+        <StackPanel Spacing="4">
+            <HyperlinkButton Content="GitHub repository" NavigateUri="https://github.com/norschel/SlidevPresenter" Padding="0"/>
+            <HyperlinkButton Content="Slidev website" NavigateUri="https://sli.dev" Padding="0"/>
+        </StackPanel>
+        <Button Content="Close" HorizontalAlignment="Right" IsDefault="True" IsCancel="True" Click="Close_Click"/>
+    </StackPanel>
+</Window>

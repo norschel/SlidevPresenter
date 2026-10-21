@@ -80,6 +80,11 @@ public partial class MainWindow : Window
         await _viewModel.RefreshLibraryAsync();
     }
 
+    private async void About_Click(object? sender, RoutedEventArgs e)
+    {
+        await new AboutWindow(_viewModel?.AppVersion ?? "unknown").ShowDialog(this);
+    }
+
     private async void Branch_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (_viewModel is null || e.AddedItems.Count == 0
