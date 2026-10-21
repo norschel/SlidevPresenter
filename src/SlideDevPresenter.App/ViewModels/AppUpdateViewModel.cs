@@ -18,6 +18,19 @@ public sealed partial class AppUpdateViewModel : ObservableObject
     [ObservableProperty]
     private string _buttonText = "Check for updates";
 
+    [ObservableProperty]
+    private bool _includePrereleases;
+
+    partial void OnIncludePrereleasesChanged(bool value)
+    {
+        _available = false;
+        _downloaded = false;
+        ButtonText = "Check for updates";
+        Status = value
+            ? "Unstable releases may contain bugs. Check for updates to include pre-releases."
+            : "Only stable releases will be offered. Check for updates again.";
+    }
+
     public AppUpdateViewModel(IAppUpdateService service, Func<Task> beforeRestart, Action shutdown)
     {
         _service = service;
@@ -52,7 +65,7 @@ public sealed partial class AppUpdateViewModel : ObservableObject
             else
             {
                 Status = "Checking GitHub Releases…";
-                var version = await _service.CheckAsync();
+                var version = await _service.CheckAsync(IncludePrereleases);
                 _available = version is not null;
                 ButtonText = _available ? "Download update" : "Check for updates";
                 Status = _available ? $"Version {version} is available." : "You are up to date.";

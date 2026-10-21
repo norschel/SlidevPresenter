@@ -101,6 +101,51 @@ public sealed class AppUpdateViewModelTests
         Assert.Equal(2, service.Checks);
     }
 
+    [Fact]
+    public async Task Updates_DefaultToStable_AndOptInIncludesPrereleases()
+    {
+        var service = new FakeUpdateService { Version = null };
+        var vm = new AppUpdateViewModel(service, () => Task.CompletedTask, () => { });
+
+        await vm.UpdateCommand.ExecuteAsync(null);
+        Assert.False(service.IncludePrereleases);
+
+        vm.IncludePrereleases = true;
+        await vm.UpdateCommand.ExecuteAsync(null);
+        Assert.True(service.IncludePrereleases);
+
+        vm.IncludePrereleases = false;
+        await vm.UpdateCommand.ExecuteAsync(null);
+        Assert.False(service.IncludePrereleases);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ChangingReleaseSelection_RequiresFreshCheckAndConsent(bool download)
+    {
+        var service = new FakeUpdateService { Version = "2.0.0-beta.1" };
+        var vm = new AppUpdateViewModel(service, () => Task.CompletedTask, () => service.Events.Add("shutdown"))
+        {
+            IncludePrereleases = true
+        };
+        await vm.UpdateCommand.ExecuteAsync(null);
+        if (download)
+            await vm.UpdateCommand.ExecuteAsync(null);
+        service.Events.Clear();
+
+        vm.IncludePrereleases = false;
+
+        Assert.Equal("Check for updates", vm.ButtonText);
+        Assert.Contains("Only stable", vm.Status);
+        service.Version = null;
+        await vm.UpdateCommand.ExecuteAsync(null);
+        Assert.False(service.IncludePrereleases);
+        Assert.Equal(2, service.Checks);
+        Assert.Equal("You are up to date.", vm.Status);
+        Assert.Empty(service.Events);
+    }
+
     private sealed class FakeUpdateService : IAppUpdateService
     {
         public bool IsInstalled { get; set; } = true;
@@ -108,10 +153,12 @@ public sealed class AppUpdateViewModelTests
         public bool FailCheck { get; set; }
         public bool FailDownload { get; set; }
         public int Checks { get; private set; }
+        public bool IncludePrereleases { get; private set; }
         public List<string> Events { get; } = [];
 
-        public Task<string?> CheckAsync()
+        public Task<string?> CheckAsync(bool includePrereleases)
         {
+            IncludePrereleases = includePrereleases;
             Checks++;
             return FailCheck ? Task.FromException<string?>(new IOException("Offline")) : Task.FromResult(Version);
         }

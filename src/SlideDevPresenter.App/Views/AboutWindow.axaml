@@ -23,6 +23,9 @@
             <HyperlinkButton Content="Download releases" NavigateUri="https://github.com/norschel/SlidevPresenter/releases/latest" Padding="0"/>
         </StackPanel>
         <StackPanel x:Name="UpdatePanel" x:DataType="vm:AppUpdateViewModel" Spacing="8">
+            <CheckBox Content="Include pre-release (unstable) versions"
+                      IsChecked="{Binding IncludePrereleases}"
+                      IsEnabled="{Binding !UpdateCommand.IsRunning}"/>
             <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
             <Button Content="{Binding ButtonText}" Command="{Binding UpdateCommand}"/>
         </StackPanel>

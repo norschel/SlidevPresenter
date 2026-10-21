@@ -6,26 +6,28 @@ namespace SlideDevPresenter.App.Services;
 public interface IAppUpdateService
 {
     bool IsInstalled { get; }
-    Task<string?> CheckAsync();
+    Task<string?> CheckAsync(bool includePrereleases);
     Task DownloadAsync();
     void PrepareRestart();
 }
 
 public sealed class AppUpdateService : IAppUpdateService
 {
-    private readonly UpdateManager? _manager = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+    private UpdateManager? _manager = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
         ? new UpdateManager(new GithubSource("https://github.com/norschel/SlidevPresenter", null, false))
         : null;
     private UpdateInfo? _update;
 
     public bool IsInstalled => _manager?.IsInstalled == true;
 
-    public async Task<string?> CheckAsync()
+    public async Task<string?> CheckAsync(bool includePrereleases)
     {
         if (!IsInstalled)
             return null;
 
-        _update = await _manager!.CheckForUpdatesAsync();
+        _update = null;
+        _manager = new UpdateManager(new GithubSource("https://github.com/norschel/SlidevPresenter", null, includePrereleases));
+        _update = await _manager.CheckForUpdatesAsync();
         return _update?.TargetFullRelease.Version.ToString();
     }
 
