@@ -54,6 +54,8 @@ public class SettingsSerializationTests
             service.Settings.DisplayManagement.RestoreDisplayTopologyOnExit = true;
             service.Settings.Shortcuts.StartFromBeginning = "Ctrl+F5";
             service.Settings.Navigation.OpenExternalLinksInSystemBrowser = false;
+            service.Settings.Editing.Enabled = true;
+            service.Settings.Editing.Edition = CodeEditorEdition.Insiders;
 
             await using var stream = new MemoryStream();
             await service.ExportAsync(stream);
@@ -70,6 +72,30 @@ public class SettingsSerializationTests
             Assert.True(imported.Settings.DisplayManagement.RestoreDisplayTopologyOnExit);
             Assert.Equal("Ctrl+F5", imported.Settings.Shortcuts.StartFromBeginning);
             Assert.False(imported.Settings.Navigation.OpenExternalLinksInSystemBrowser);
+            Assert.True(imported.Settings.Editing.Enabled);
+            Assert.Equal(CodeEditorEdition.Insiders, imported.Settings.Editing.Edition);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ImportAsync_LegacyConfiguration_DefaultsEditingToOff()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var service = CreateService(path);
+            const string configuration =
+                """{"sources":[],"defaults":{},"appearance":{},"webView":{},"displayManagement":{},"shortcuts":{},"navigation":{}}""";
+            await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(configuration));
+
+            await service.ImportAsync(stream);
+
+            Assert.False(service.Settings.Editing.Enabled);
+            Assert.Equal(CodeEditorEdition.Stable, service.Settings.Editing.Edition);
         }
         finally
         {

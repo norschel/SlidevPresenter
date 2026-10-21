@@ -101,6 +101,17 @@
                 </StackPanel>
             </TabItem>
 
+            <TabItem Header="Edit">
+                <StackPanel Spacing="10" Margin="12">
+                    <CheckBox Content="Enable editing in VS Code" IsChecked="{Binding EditingEnabled}" IsEnabled="{Binding HasCodeEditor}"/>
+                    <TextBlock Text="VS Code release" IsVisible="{Binding HasCodeEditor}"/>
+                    <ComboBox ItemsSource="{Binding AvailableCodeEditors}" SelectedItem="{Binding SelectedCodeEditor}" IsVisible="{Binding HasCodeEditor}" Width="180"/>
+                    <TextBlock Text="Stable is the regular VS Code release; Insiders is the preview release." IsVisible="{Binding HasCodeEditor}" TextWrapping="Wrap"/>
+                    <TextBlock Text="VS Code was not found. Install VS Code or VS Code Insiders, then reopen Settings." IsVisible="{Binding !HasCodeEditor}" TextWrapping="Wrap"/>
+                    <TextBlock Text="Opens the selected local or checked-out repository presentation folder. Remote URLs cannot be edited." TextWrapping="Wrap"/>
+                </StackPanel>
+            </TabItem>
+
             <TabItem Header="WebView">
                 <StackPanel Spacing="10" Margin="12">
                     <CheckBox Content="Prefer embedded WebView" IsChecked="{Binding PreferEmbeddedWebView}"/>

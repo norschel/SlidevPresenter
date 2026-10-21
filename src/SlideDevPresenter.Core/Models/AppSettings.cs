@@ -9,6 +9,7 @@ public sealed class AppSettings
     public DisplayManagementSettings DisplayManagement { get; set; } = new();
     public ShortcutsSettings Shortcuts { get; set; } = new();
     public NavigationSettings Navigation { get; set; } = new();
+    public EditingSettings Editing { get; set; } = new();
 }
 
 public sealed class DefaultSettings
@@ -57,4 +58,10 @@ public sealed class NavigationSettings
 {
     public bool OpenExternalLinksInSystemBrowser { get; set; } = true;
     public bool OpenExternalLinksInEmbeddedBrowser { get; set; } = true;
+}
+
+public sealed class EditingSettings
+{
+    public bool Enabled { get; set; }
+    public CodeEditorEdition Edition { get; set; } = CodeEditorEdition.Stable;
 }
