@@ -323,7 +323,9 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    public async Task RefreshLibraryAsync()
+    public async Task RefreshLibraryAsync() => await RefreshLibraryCoreAsync();
+
+    private async Task RefreshLibraryCoreAsync(PresentationSource? changingSource = null, string? previousBranch = null)
     {
         if (IsRefreshing)
             return;
@@ -356,6 +358,19 @@ public sealed partial class MainViewModel : ObservableObject
                         continue;
                     }
                     var prepared = await _gitRepositoryService.PrepareAsync(source, ConfirmRepositoryUpdateAsync);
+                    if (prepared.BranchSwitchDeclined && changingSource?.Id == source.Id)
+                    {
+                        source.Branch = previousBranch;
+                        SelectedBranch = previousBranch;
+                        try
+                        {
+                            await _settingsService.SaveAsync();
+                        }
+                        catch (Exception exception)
+                        {
+                            messages.Add($"Could not restore the selected branch in settings. {exception.Message}");
+                        }
+                    }
                     if (prepared.Message is not null)
                         messages.Add(prepared.Message);
                     if (prepared.Directory is not null)
@@ -497,19 +512,24 @@ public sealed partial class MainViewModel : ObservableObject
         var previousBranch = source.Branch;
         source.Branch = branch;
         SelectedBranch = branch;
+        IsRefreshing = true;
         try
         {
             await _settingsService.SaveAsync();
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception)
         {
             source.Branch = previousBranch;
             SelectedBranch = previousBranch;
             SourceMessage = $"Could not save the selected branch. {exception.Message}";
             return;
         }
+        finally
+        {
+            IsRefreshing = false;
+        }
 
-        await RefreshLibraryAsync();
+        await RefreshLibraryCoreAsync(source, previousBranch);
     }
 
     [RelayCommand(CanExecute = nameof(CanLaunch))]

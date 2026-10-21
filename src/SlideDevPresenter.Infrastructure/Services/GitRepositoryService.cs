@@ -98,7 +98,7 @@ public sealed class GitRepositoryService(string? cacheDirectory = null, string g
                 if (local.ExitCode != 0 && remoteBranch.ExitCode != 0)
                     return new(null, $"Branch {branch} was not found for {source.Name}. Check the branch name and remote manually in {checkout}, then refresh.");
                 if (!await confirmUpdate($"Switch {source.Name} from {currentBranch.Output.Trim()} to {branch} in a terminal? Checkout: {checkout}"))
-                    return new(null, $"Branch switch declined for {source.Name}. Select the current branch in Sources or refresh to try again.");
+                    return new(checkout, $"Branch switch declined for {source.Name}. Select the current branch in Sources or refresh to try again.", BranchSwitchDeclined: true);
                 if (local.ExitCode == 0)
                     await _gitClient.OpenTerminalAsync("-C", checkout, "switch", "--", branch!);
                 else

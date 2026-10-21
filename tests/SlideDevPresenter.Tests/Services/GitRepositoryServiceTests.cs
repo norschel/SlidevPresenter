@@ -176,16 +176,22 @@ public sealed class GitRepositoryServiceTests
         });
 
         Assert.Contains("from main to release/slides", prompt);
-        Assert.Null(result.Directory);
         if (!accept)
         {
+            Assert.Equal(checkout.Path, result.Directory);
+            Assert.True(result.BranchSwitchDeclined);
             Assert.Empty(checkout.Client.TerminalCommands);
             Assert.Contains("declined", result.Message);
         }
-        else if (localBranch)
-            Assert.Equal(new[] { "-C", checkout.Path, "switch", "--", "release/slides" }, Assert.Single(checkout.Client.TerminalCommands));
         else
-            Assert.Equal(new[] { "-C", checkout.Path, "switch", "--track", "-c", "release/slides", "--", "origin/release/slides" }, Assert.Single(checkout.Client.TerminalCommands));
+        {
+            Assert.Null(result.Directory);
+            Assert.False(result.BranchSwitchDeclined);
+            if (localBranch)
+                Assert.Equal(new[] { "-C", checkout.Path, "switch", "--", "release/slides" }, Assert.Single(checkout.Client.TerminalCommands));
+            else
+                Assert.Equal(new[] { "-C", checkout.Path, "switch", "--track", "-c", "release/slides", "--", "origin/release/slides" }, Assert.Single(checkout.Client.TerminalCommands));
+        }
     }
 
     [Fact]

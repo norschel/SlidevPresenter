@@ -62,6 +62,7 @@ public sealed class SettingsService : ISettingsService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save settings to {Path}.", _settingsFilePath);
+            throw;
         }
     }
 
