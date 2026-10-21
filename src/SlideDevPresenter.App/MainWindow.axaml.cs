@@ -242,7 +242,21 @@ public partial class MainWindow : Window
         EmbeddedWebView.NewWindowRequested += OnEmbeddedWebViewNewWindowRequested;
         EmbeddedWebView.WebMessageReceived += OnWebViewWebMessageReceived;
         EmbeddedWebView.KeyDown += OnWebViewKeyDown;
+        SyncEmbeddedWebViewSource();
         SyncEmbeddedWebViewAttachment();
+    }
+
+    private void SyncEmbeddedWebViewSource()
+    {
+        // WebView2 on Windows fails when navigated to about:blank while being torn down after ESC;
+        // the view is detached once the presentation stops, so keep the last real page instead.
+        if (_embeddedWebViewsDisabledForSession
+            || _viewModel?.CurrentSurfaceUriOrBlank is not { } uri || !uri.IsAbsoluteUri
+            || string.Equals(uri.Scheme, "about", StringComparison.OrdinalIgnoreCase)
+            || EmbeddedWebView.Source == uri)
+            return;
+
+        EmbeddedWebView.Source = uri;
     }
 
     private void ConfigureBrowserWebView()
@@ -265,6 +279,9 @@ public partial class MainWindow : Window
     {
         switch (e.PropertyName)
         {
+            case nameof(MainViewModel.CurrentSurfaceUriOrBlank):
+                SyncEmbeddedWebViewSource();
+                break;
             case nameof(MainViewModel.CanShowEmbeddedSurface):
                 SyncEmbeddedWebViewAttachment();
                 break;

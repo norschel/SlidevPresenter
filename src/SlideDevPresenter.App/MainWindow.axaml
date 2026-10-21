@@ -179,7 +179,7 @@
 
                     <Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource AppSurfaceBrush}" CornerRadius="12" Padding="8">
                         <Panel>
-                            <NativeWebView x:Name="EmbeddedWebView" IsVisible="{Binding CanShowEmbeddedSurface}" Source="{Binding CurrentSurfaceUriOrBlank}"/>
+                            <NativeWebView x:Name="EmbeddedWebView" IsVisible="{Binding CanShowEmbeddedSurface}"/>
                             <StackPanel IsVisible="{Binding CanShowEmbeddedSurface, Converter={x:Static BoolConverters.Not}}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="420">
                                 <TextBlock Text="Embedded preview unavailable" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                                 <TextBlock Text="{Binding EmbeddedSurfaceHint}" TextWrapping="Wrap" TextAlignment="Center" Opacity="0.7"/>
