@@ -297,6 +297,8 @@
         </Border>
 
         <Border Grid.Row="2" Grid.ColumnSpan="2" Background="{DynamicResource AppChromeBrush}" Padding="8,6" IsVisible="{Binding ShowStatusBar}">
+            <DockPanel>
+            <TextBlock DockPanel.Dock="Right" Text="{Binding AppVersion, StringFormat='v{0}'}" FontSize="12" Opacity="0.7" Margin="16,0,0,0"/>
             <StackPanel Orientation="Horizontal" Spacing="16">
                 <TextBlock Text="{Binding HostState}" FontSize="12"/>
                 <TextBlock Text="{Binding CurrentSurfaceLabel}" FontSize="12"/>
@@ -306,6 +308,7 @@
                 <TextBlock Text="{Binding PdfExportMessage}" FontSize="12"/>
                 <TextBlock Text="{Binding LibraryMessage}" FontSize="12"/>
             </StackPanel>
+            </DockPanel>
         </Border>
     </Grid>
 </Window>

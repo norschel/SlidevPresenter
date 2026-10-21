@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SlideDevPresenter.App.Services;
@@ -206,6 +207,8 @@ public sealed partial class MainViewModel : ObservableObject
     public bool CanShowBrowserFallback => IsRunning && _settingsService.Settings.WebView.AllowExternalBrowserFallback;
     public bool ShowRibbon => _settingsService.Settings.Appearance.ShowRibbon;
     public bool ShowStatusBar => _settingsService.Settings.Appearance.ShowStatusBar;
+    private static readonly string s_appVersion = GetAppVersion();
+    public string AppVersion => s_appVersion;
     public bool HasSlides => Slides.Count > 0;
     public bool CanExportPdf => SelectedProject?.SourceType == PresentationSourceType.LocalProject && !IsExportingPdf;
     /// <summary>Only projects that map 1:1 to a configured source can be removed; root-scanned projects are managed via their root source.</summary>
@@ -825,6 +828,20 @@ public sealed partial class MainViewModel : ObservableObject
 
         var metadata = await _slideDeckMetadataReader.ReadAsync(projectViewModel.ToModel());
         ApplyDeckMetadata(loadVersion, metadata);
+    }
+
+    private static string GetAppVersion()
+    {
+        var assembly = typeof(MainViewModel).Assembly;
+        var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(informational))
+        {
+            // Strip SourceLink commit hash suffix (e.g. "1.0.0+abc123").
+            var plusIndex = informational.IndexOf('+');
+            return plusIndex > 0 ? informational[..plusIndex] : informational;
+        }
+
+        return assembly.GetName().Version?.ToString(3) ?? "unknown";
     }
 
     private void ApplyDeckMetadata(int loadVersion, SlideDeckMetadata metadata)
