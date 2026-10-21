@@ -1,5 +1,6 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:services="using:SlideDevPresenter.App.Services"
              x:Class="SlideDevPresenter.App.App"
              RequestedThemeVariant="Default">
              <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
@@ -26,6 +27,17 @@
                     <SolidColorBrush x:Key="AppCardBrush" Color="#FFFFFF"/>
                     <SolidColorBrush x:Key="AppSurfaceBrush" Color="#F0F0F0"/>
                     <SolidColorBrush x:Key="AppTabBarBrush" Color="#EBEBEB"/>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="{x:Static services:ThemeService.Blue}">
+                    <SolidColorBrush x:Key="AppChromeBrush" Color="#0F2A4A"/>
+                    <SolidColorBrush x:Key="AppChromePanelBrush" Color="#173A63"/>
+                    <SolidColorBrush x:Key="AppSidebarBrush" Color="#12304F"/>
+                    <SolidColorBrush x:Key="AppElevatedBrush" Color="#1D4573"/>
+                    <SolidColorBrush x:Key="AppWorkspaceBrush" Color="#0A1F38"/>
+                    <SolidColorBrush x:Key="AppCardBrush" Color="#143657"/>
+                    <SolidColorBrush x:Key="AppSurfaceBrush" Color="#071629"/>
+                    <SolidColorBrush x:Key="AppTabBarBrush" Color="#0D2541"/>
+                    <SolidColorBrush x:Key="SystemControlBackgroundAltHighBrush" Color="#0A1F38"/>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>

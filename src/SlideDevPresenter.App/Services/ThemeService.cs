@@ -11,6 +11,9 @@ public interface IThemeService
 
 public sealed class ThemeService : IThemeService
 {
+    // Inherits Dark so Fluent control resources fall back to the dark palette.
+    public static readonly ThemeVariant Blue = new("Blue", ThemeVariant.Dark);
+
     public void ApplyTheme(string? theme)
     {
         if (Application.Current is null)
@@ -31,6 +34,7 @@ public sealed class ThemeService : IThemeService
         {
             "light" => ThemeVariant.Light,
             "dark" => ThemeVariant.Dark,
+            "blue" => Blue,
             _ => ThemeVariant.Default
         };
 }

@@ -38,7 +38,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public ObservableCollection<string> Branches { get; } = [];
     public IReadOnlyList<string> AvailableSourceTypes { get; } = ["Local", nameof(PresentationSourceType.HostedUrl), nameof(PresentationSourceType.Git), nameof(PresentationSourceType.GitHub)];
     public IReadOnlyList<string> AvailableModes { get; } = Enum.GetNames<PresentationSurfaceMode>();
-    public IReadOnlyList<string> AvailableThemes { get; } = ["System", "Light", "Dark"];
+    public IReadOnlyList<string> AvailableThemes { get; } = ["System", "Light", "Dark", "Blue"];
 
     [ObservableProperty]
     private SourceViewModel? _selectedSource;
