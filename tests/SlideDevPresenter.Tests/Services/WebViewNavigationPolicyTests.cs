@@ -100,4 +100,12 @@ public sealed class WebViewNavigationPolicyTests
 
         Assert.True(result);
     }
+
+    [Fact]
+    public void ShouldOpenExternally_ForAboutBlankReset_ReturnsFalse()
+    {
+        var result = _policy.ShouldOpenExternally(new Uri("about:blank"), new Uri("http://localhost:3030/presenter/"));
+
+        Assert.False(result);
+    }
 }
