@@ -17,7 +17,7 @@ public sealed class PresentationSourceListSerializerTests
     {
       Id = Guid.NewGuid(), Name = "Team slides", Type = type, Location = location,
             CheckoutPath = "/private/local-checkout", RequiresAuthentication = true, IsPublic = false,
-            Branch = "release/slides"
+            Branch = "release/slides", IsEnabled = false
     };
     await using var stream = new MemoryStream();
 
@@ -32,6 +32,7 @@ public sealed class PresentationSourceListSerializerTests
     Assert.Equal("release/slides", imported.Branch);
     Assert.True(imported.RequiresAuthentication);
     Assert.False(imported.IsPublic);
+    Assert.False(imported.IsEnabled);
   }
 
     [Fact]
@@ -70,6 +71,7 @@ public sealed class PresentationSourceListSerializerTests
         Assert.Equal("Team deck", entry.GetProperty("comment").GetString());
         Assert.False(entry.GetProperty("isPublic").GetBoolean());
         Assert.True(entry.GetProperty("requiresAuthentication").GetBoolean());
+        Assert.True(entry.GetProperty("isEnabled").GetBoolean());
         Assert.False(entry.TryGetProperty("branch", out _));
 
         var json = Encoding.UTF8.GetString(stream.ToArray());
@@ -154,6 +156,7 @@ public sealed class PresentationSourceListSerializerTests
         Assert.True(sources[0].RequiresAuthentication);
         Assert.False(sources[0].IsPublic);
         Assert.Equal("Requires access", sources[0].Comment);
+        Assert.True(sources[0].IsEnabled);
         Assert.Equal("http://slides.example.com/talk", sources[1].Location);
         Assert.Equal("https://slides.example.com/secure", sources[2].Location);
         Assert.True(sources[2].RequiresAuthentication);

@@ -74,6 +74,7 @@ public static class PresentationSourceListSerializer
                     Type = repositoryType,
                     Location = remote,
                     Branch = entry.Branch,
+                    IsEnabled = entry.IsEnabled,
                     Comment = entry.Comment,
                     IsPublic = entry.IsPublic,
                     RequiresAuthentication = entry.RequiresAuthentication
@@ -100,7 +101,7 @@ public static class PresentationSourceListSerializer
                 Name = entry.Title.Trim(),
                 Type = PresentationSourceType.HostedUrl,
                 Location = address.Value,
-                IsEnabled = true,
+                IsEnabled = entry.IsEnabled,
                 Comment = entry.Comment,
                 IsPublic = entry.IsPublic,
                 RequiresAuthentication = entry.RequiresAuthentication || address.AuthenticationRemoved
@@ -124,6 +125,7 @@ public static class PresentationSourceListSerializer
                 Address = remote,
                 Branch = string.IsNullOrWhiteSpace(source.Branch) ? null : source.Branch.Trim(),
                 Type = source.Type == PresentationSourceType.Git ? "git" : "github-repository",
+                IsEnabled = source.IsEnabled,
                 Comment = source.Comment,
                 IsPublic = source.IsPublic,
                 RequiresAuthentication = source.RequiresAuthentication
@@ -138,6 +140,7 @@ public static class PresentationSourceListSerializer
             Title = string.IsNullOrWhiteSpace(source.Name) ? address.Value : source.Name,
             Address = address.Value,
             Type = isGitHub ? "github" : address.IsHttp ? "http" : "https",
+            IsEnabled = source.IsEnabled,
             Comment = source.Comment,
             IsPublic = source.IsPublic,
             RequiresAuthentication = source.RequiresAuthentication || address.AuthenticationRemoved
@@ -217,6 +220,7 @@ public static class PresentationSourceListSerializer
         public required string Title { get; init; }
         public required string Address { get; init; }
         public required string Type { get; init; }
+        public bool IsEnabled { get; init; } = true;
         public required string Comment { get; init; }
         public required bool IsPublic { get; init; }
         public required bool RequiresAuthentication { get; init; }
