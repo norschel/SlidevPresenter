@@ -9,4 +9,4 @@ public interface IGitRepositoryService
     Task<RepositoryPreparation> PrepareAsync(PresentationSource source, Func<string, Task<bool>> confirmUpdate);
 }
 
-public sealed record RepositoryPreparation(string? Directory, string? Message);
+public sealed record RepositoryPreparation(string? Directory, string? Message, bool BranchSwitchDeclined = false);

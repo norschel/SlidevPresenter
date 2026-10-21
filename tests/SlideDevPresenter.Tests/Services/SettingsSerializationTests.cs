@@ -166,6 +166,22 @@ public class SettingsSerializationTests
     }
 
     [Fact]
+    public async Task SaveAsync_WhenPersistenceFails_ThrowsIOException()
+    {
+        var blockerPath = Path.GetTempFileName();
+        try
+        {
+            var service = CreateService(Path.Join(blockerPath, "settings.json"));
+
+            await Assert.ThrowsAnyAsync<IOException>(() => service.SaveAsync());
+        }
+        finally
+        {
+            File.Delete(blockerPath);
+        }
+    }
+
+    [Fact]
     public async Task SaveAsync_ThenLoadAsync_RoundTripsSources()
     {
         var path = Path.GetTempFileName();

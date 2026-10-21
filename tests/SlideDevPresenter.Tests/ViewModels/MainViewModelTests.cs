@@ -8,8 +8,19 @@ namespace SlideDevPresenter.Tests.ViewModels;
 internal sealed class FakeSettingsService : ISettingsService
 {
     public AppSettings Settings { get; private set; } = new();
+    public int SaveCount { get; private set; }
+    public Exception? SaveException { get; set; }
+    public Task? SaveTask { get; set; }
     public Task LoadAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-    public Task SaveAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task SaveAsync(CancellationToken cancellationToken = default)
+    {
+        SaveCount++;
+        if (SaveException is not null)
+            return Task.FromException(SaveException);
+        if (SaveTask is not null)
+            return SaveTask;
+        return Task.CompletedTask;
+    }
     public Task ExportAsync(Stream destination, CancellationToken cancellationToken = default) =>
         JsonSerializer.SerializeAsync(destination, Settings, cancellationToken: cancellationToken);
 
@@ -158,6 +169,7 @@ internal sealed class FakeGitRepositoryService : IGitRepositoryService
     public bool Available { get; set; } = true;
     public RepositoryPreparation Result { get; set; } = new("/tmp/checkout", null);
     public int PrepareCount { get; private set; }
+    public string? PreparedBranch { get; private set; }
     public bool AskForUpdate { get; set; }
     public bool? UpdateAccepted { get; private set; }
 
@@ -167,6 +179,7 @@ internal sealed class FakeGitRepositoryService : IGitRepositoryService
     public async Task<RepositoryPreparation> PrepareAsync(PresentationSource source, Func<string, Task<bool>> confirmUpdate)
     {
         PrepareCount++;
+        PreparedBranch = source.Branch;
         if (AskForUpdate)
             UpdateAccepted = await confirmUpdate("New commits available");
         return Result;
@@ -217,6 +230,115 @@ public class MainViewModelTests
         await vm.RefreshLibraryAsync();
         Assert.Equal(id, Assert.Single(vm.Projects).Id);
         Assert.Equal(id, vm.SelectedProject?.Id);
+    }
+
+    [Fact]
+    public async Task SelectedRepositoryProject_CanPersistAndRefreshWithAnotherBranch()
+    {
+        var settings = new FakeSettingsService();
+        var source = new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Repository", Type = PresentationSourceType.Git,
+            Location = "https://github.com/owner/slides", Branch = "main"
+        };
+        settings.Settings.Sources.Add(source);
+        var git = new FakeGitRepositoryService();
+        var vm = CreateViewModel(settings, gitService: git);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject(), source.Id);
+
+        Assert.True(vm.IsRepositoryProjectSelected);
+        Assert.Equal(new[] { "main", "release/slides" }, vm.AvailableBranches);
+        Assert.True(vm.CanChangeSelectedBranch);
+
+        await vm.ChangeSelectedBranchAsync("release/slides");
+
+        Assert.Equal("release/slides", source.Branch);
+        Assert.Equal("release/slides", git.PreparedBranch);
+        Assert.Equal(1, settings.SaveCount);
+        Assert.Equal(1, git.PrepareCount);
+    }
+
+    [Fact]
+    public async Task SelectedRepositoryProject_SaveFailure_RestoresBranchWithoutRefreshing()
+    {
+        var settings = new FakeSettingsService { SaveException = new IOException("Disk full") };
+        var source = new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Repository", Type = PresentationSourceType.Git,
+            Location = "https://github.com/owner/slides", Branch = "main"
+        };
+        settings.Settings.Sources.Add(source);
+        var git = new FakeGitRepositoryService();
+        var vm = CreateViewModel(settings, gitService: git);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject(), source.Id);
+
+        await vm.ChangeSelectedBranchAsync("release/slides");
+
+        Assert.Equal("main", source.Branch);
+        Assert.Equal("main", vm.SelectedBranch);
+        Assert.Equal(1, settings.SaveCount);
+        Assert.Equal(0, git.PrepareCount);
+        Assert.False(vm.IsRefreshing);
+        Assert.Contains("Could not save the selected branch", vm.SourceMessage);
+    }
+
+    [Fact]
+    public async Task SelectedRepositoryProject_DeclinedSwitch_RestoresBranchAndReloadsCheckout()
+    {
+        var settings = new FakeSettingsService();
+        var source = new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Repository", Type = PresentationSourceType.Git,
+            Location = "https://github.com/owner/slides", Branch = "main"
+        };
+        settings.Settings.Sources.Add(source);
+        var scanner = new FakeSourceScanner();
+        scanner.Projects.Add(new PresentationProject
+        {
+            Id = Guid.NewGuid(), Name = "Checkout", SourceType = PresentationSourceType.LocalProject,
+            Location = "/tmp/checkout", SlidesFilePath = "/tmp/checkout/slides.md"
+        });
+        var git = new FakeGitRepositoryService
+        {
+            Result = new("/tmp/checkout", "Branch switch declined.", BranchSwitchDeclined: true)
+        };
+        var vm = CreateViewModel(settings, scanner, gitService: git);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject(), source.Id);
+
+        await vm.ChangeSelectedBranchAsync("release/slides");
+
+        Assert.Equal("main", source.Branch);
+        Assert.Equal("main", vm.SelectedBranch);
+        Assert.Equal(2, settings.SaveCount);
+        Assert.Equal("/tmp/checkout", Assert.Single(vm.Projects).Location);
+        Assert.Contains("Branch switch declined", vm.SourceMessage);
+        Assert.False(vm.IsRefreshing);
+    }
+
+    [Fact]
+    public async Task SelectedRepositoryProject_SaveInProgress_DisablesBranchChangeAndLaunch()
+    {
+        var settings = new FakeSettingsService();
+        var source = new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Repository", Type = PresentationSourceType.Git,
+            Location = "https://github.com/owner/slides", Branch = "main"
+        };
+        settings.Settings.Sources.Add(source);
+        var vm = CreateViewModel(settings, gitService: new FakeGitRepositoryService());
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject(), source.Id);
+        var savePending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        settings.SaveTask = savePending.Task;
+
+        var changeTask = vm.ChangeSelectedBranchAsync("release/slides");
+
+        Assert.True(vm.IsRefreshing);
+        Assert.False(vm.CanChangeSelectedBranch);
+        Assert.False(vm.LaunchCommand.CanExecute(null));
+
+        savePending.SetResult();
+        await changeTask;
+        Assert.False(vm.IsRefreshing);
     }
 
     [Fact]
