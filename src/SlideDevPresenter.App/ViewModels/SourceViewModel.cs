@@ -17,6 +17,7 @@ public sealed partial class SourceViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanEnable))]
     [NotifyPropertyChangedFor(nameof(IsLocal))]
     [NotifyPropertyChangedFor(nameof(TypeName))]
+    [NotifyPropertyChangedFor(nameof(ShowBranch))]
     private PresentationSourceType _type;
 
     [ObservableProperty]
@@ -32,7 +33,12 @@ public sealed partial class SourceViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanEnable))]
     private bool _isGitAvailable;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowBranch))]
+    private bool _isLocalGitRepository;
+
     public bool IsRepository => Type is PresentationSourceType.Git or PresentationSourceType.GitHub;
+    public bool ShowBranch => IsRepository || (IsLocal && IsLocalGitRepository);
     public bool CanEnable => !IsRepository || IsGitAvailable;
     public bool IsLocal => Type is PresentationSourceType.LocalRoot or PresentationSourceType.LocalProject;
     public string TypeName

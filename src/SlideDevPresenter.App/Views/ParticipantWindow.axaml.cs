@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using SlideDevPresenter.App.Services;
 
 namespace SlideDevPresenter.App.Views;
@@ -53,6 +54,55 @@ public partial class ParticipantWindow : Window
     {
         _isFullscreenRequested = true;
         WindowState = WindowState.FullScreen;
+    }
+
+    /// <summary>Moves the window to <paramref name="position"/> without treating the fullscreen exit as a user exit.</summary>
+    public void MoveTo(PixelPoint position)
+    {
+        var wasFullscreen = _isFullscreenRequested;
+        _isFullscreenRequested = false;
+
+        if (WindowState != WindowState.Normal)
+            WindowState = WindowState.Normal;
+
+        Position = position;
+
+        if (!wasFullscreen)
+        {
+            Dispatcher.UIThread.Post(FocusPresentation, DispatcherPriority.Background);
+            return;
+        }
+
+        // Let the platform finish leaving fullscreen (async on macOS) before re-entering it on the new display.
+        Dispatcher.UIThread.Post(() =>
+        {
+            Position = position;
+            SetFullscreen();
+            Dispatcher.UIThread.Post(FocusPresentation, DispatcherPriority.Background);
+            // macOS ignores activation while the fullscreen animation runs; retry once it has settled.
+            DispatcherTimer.RunOnce(FocusPresentation, TimeSpan.FromMilliseconds(900));
+        }, DispatcherPriority.Background);
+    }
+
+    /// <summary>Sends a presentation key (blank/restore) to the participant slides.</summary>
+    public void DispatchPresentationKey(Key key) =>
+        _ = WebViewKeyboardBridge.DispatchKeyAsync(WebView, key, KeyModifiers.None, useFocusedElement: false);
+
+    // Moving/re-fullscreening drops keyboard focus, so clicker and arrow keys would no longer reach the slides.
+    private async void FocusPresentation()
+    {
+        Activate();
+        WebView.Focus();
+
+        // The native view can be re-created by the fullscreen/screen change, dropping the injected key bridge.
+        try
+        {
+            await WebView.InvokeScript(WebViewKeyboardBridge.Script);
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Trace.TraceError($"Could not reinstall presentation keyboard bridge: {exception}");
+        }
     }
 
     private void AttachHandlers()

@@ -97,6 +97,7 @@ public sealed class WebViewKeyboardBridgeTests
     [Theory]
     [InlineData("sdp:blank", true)]
     [InlineData("\"sdp:blank\"", true)]
+    [InlineData("sdp:blank-white", true)]
     [InlineData("sdp:restore", false)]
     [InlineData("sdp:escape", null)]
     public void GetBlankState_ForBridgeMessage_ReturnsExpectedState(string body, bool? expected)

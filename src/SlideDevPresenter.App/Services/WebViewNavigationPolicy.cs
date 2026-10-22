@@ -7,6 +7,10 @@ public sealed class WebViewNavigationPolicy
         if (!request.IsAbsoluteUri)
             return !IsInternalRelative(request);
 
+        // The host resets the surface to about:blank when a presentation stops.
+        if (string.Equals(request.Scheme, "about", StringComparison.OrdinalIgnoreCase))
+            return false;
+
         if (!IsWebScheme(request))
             return true;
 

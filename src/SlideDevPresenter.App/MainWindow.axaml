@@ -40,6 +40,7 @@
                         <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsHomeRibbonSelected}">
                             <Button Content="▶ Start" Command="{Binding LaunchCommand}" ToolTip.Tip="Start presentation"/>
                             <Button Content="■ Stop" Command="{Binding StopCommand}"/>
+                            <Button Content="⇄ Swap Displays" Command="{Binding SwapDisplaysCommand}" ToolTip.Tip="Swap the participant view and the app between displays"/>
                             <Button Content="↻ Retry" Command="{Binding RetryCommand}"/>
                             <Button Content="⏎ Resume" Command="{Binding ResumeCommand}" ToolTip.Tip="Resume presentation from last saved position"/>
                             <Button Content="◀ Prev" Click="PreviousSlide_Click" IsVisible="{Binding IsRunning}" IsEnabled="{Binding CanShowEmbeddedSurface}" ToolTip.Tip="Previous slide"/>
@@ -71,6 +72,7 @@
                             <Button x:Name="StartFromCurrentButton" Content="Start Current" Command="{Binding StartFromCurrentSlideCommand}" ToolTip.Tip="Start from selected slide"/>
                             <Button x:Name="StartPresenterViewButton" Content="Presenter View" Command="{Binding StartPresenterViewCommand}" ToolTip.Tip="Start presenter view"/>
                             <Button Content="■ Stop" Command="{Binding StopCommand}" ToolTip.Tip="Stop presentation"/>
+                            <Button Content="⇄ Swap Displays" Command="{Binding SwapDisplaysCommand}" ToolTip.Tip="Swap the participant view and the app between displays"/>
                             <Button Content="↻ Retry" Command="{Binding RetryCommand}" ToolTip.Tip="Retry presentation"/>
                             <Button Content="⏎ Resume" Command="{Binding ResumeCommand}" ToolTip.Tip="Resume presentation from last saved position"/>
                             <Button Content="◀ Prev" Click="PreviousSlide_Click" IsVisible="{Binding IsRunning}" IsEnabled="{Binding CanShowEmbeddedSurface}" ToolTip.Tip="Previous slide"/>
@@ -177,7 +179,7 @@
 
                     <Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource AppSurfaceBrush}" CornerRadius="12" Padding="8">
                         <Panel>
-                            <NativeWebView x:Name="EmbeddedWebView" IsVisible="{Binding CanShowEmbeddedSurface}" Source="{Binding CurrentSurfaceUriOrBlank}"/>
+                            <NativeWebView x:Name="EmbeddedWebView" IsVisible="{Binding CanShowEmbeddedSurface}"/>
                             <StackPanel IsVisible="{Binding CanShowEmbeddedSurface, Converter={x:Static BoolConverters.Not}}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="420">
                                 <TextBlock Text="Embedded preview unavailable" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                                 <TextBlock Text="{Binding EmbeddedSurfaceHint}" TextWrapping="Wrap" TextAlignment="Center" Opacity="0.7"/>

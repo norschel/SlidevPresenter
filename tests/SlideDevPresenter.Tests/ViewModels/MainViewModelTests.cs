@@ -118,6 +118,14 @@ internal sealed class FakePresentationWindowService : IPresentationWindowService
         return Task.CompletedTask;
     }
 
+    public int SwapCallCount { get; private set; }
+
+    public Task SwapDisplaysAsync(CancellationToken cancellationToken = default)
+    {
+        SwapCallCount++;
+        return Task.CompletedTask;
+    }
+
     public Task CloseAsync(CancellationToken cancellationToken = default)
     {
         CloseCallCount++;
@@ -175,6 +183,8 @@ internal sealed class FakeGitRepositoryService : IGitRepositoryService
 
     public Task<bool> IsGitAvailableAsync() => Task.FromResult(Available);
     public Task<IReadOnlyList<string>> GetBranchesAsync(PresentationSource source) => Task.FromResult<IReadOnlyList<string>>(["main", "release/slides"]);
+    public string? CurrentBranch { get; set; } = "main";
+    public Task<string?> GetCurrentBranchAsync(PresentationSource source) => Task.FromResult(Available ? CurrentBranch : null);
 
     public async Task<RepositoryPreparation> PrepareAsync(PresentationSource source, Func<string, Task<bool>> confirmUpdate)
     {
@@ -255,6 +265,46 @@ public class MainViewModelTests
         Assert.Equal("release/slides", source.Branch);
         Assert.Equal("release/slides", git.PreparedBranch);
         Assert.Equal(1, settings.SaveCount);
+        Assert.Equal(1, git.PrepareCount);
+    }
+
+    [Theory]
+    [InlineData("main", true)]
+    [InlineData(null, false)]
+    public void SelectedLocalProject_DetectsGitRepositoryAndOffersBranches(string? currentBranch, bool isRepository)
+    {
+        var settings = new FakeSettingsService();
+        var source = new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Local", Type = PresentationSourceType.LocalRoot, Location = "/tmp/slides"
+        };
+        settings.Settings.Sources.Add(source);
+        var git = new FakeGitRepositoryService { CurrentBranch = currentBranch };
+        var vm = CreateViewModel(settings, gitService: git);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject(), source.Id);
+
+        Assert.Equal(isRepository, vm.IsRepositoryProjectSelected);
+        Assert.Equal(isRepository, vm.CanChangeSelectedBranch);
+        Assert.Equal(currentBranch, vm.SelectedBranch);
+    }
+
+    [Fact]
+    public async Task SelectedLocalProject_ChangingBranch_PreparesLocalFolder()
+    {
+        var settings = new FakeSettingsService();
+        var source = new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Local", Type = PresentationSourceType.LocalRoot, Location = "/tmp/slides"
+        };
+        settings.Settings.Sources.Add(source);
+        var git = new FakeGitRepositoryService();
+        var vm = CreateViewModel(settings, gitService: git);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject(), source.Id);
+
+        await vm.ChangeSelectedBranchAsync("release/slides");
+
+        Assert.Equal("release/slides", source.Branch);
+        Assert.Equal("release/slides", git.PreparedBranch);
         Assert.Equal(1, git.PrepareCount);
     }
 
@@ -1271,7 +1321,7 @@ public class MainViewModelTests
     }
 
     [Fact]
-    public async Task StopAsync_WhenBrowserRibbonSelected_SwitchesToPresentationRibbon()
+    public async Task StopAsync_WhenBrowserRibbonSelected_SwitchesToHomeRibbon()
     {
         var host = new FakeProcessHost();
         var vm = CreateViewModel(host: host);
@@ -1283,7 +1333,7 @@ public class MainViewModelTests
 
         await vm.StopAsync();
 
-        Assert.Equal("Presentation", vm.SelectedRibbonTab);
+        Assert.Equal("Home", vm.SelectedRibbonTab);
         Assert.False(vm.IsBrowserRibbonSelected);
         Assert.True(vm.IsNormalWorkspaceVisible);
     }
@@ -1309,7 +1359,7 @@ public class MainViewModelTests
         windowService.SimulatePresentationExited();
 
         Assert.Empty(vm.BrowserTabs);
-        Assert.Equal("Presentation", vm.SelectedRibbonTab);
+        Assert.Equal("Home", vm.SelectedRibbonTab);
         Assert.False(vm.IsBrowserRibbonSelected);
     }
 

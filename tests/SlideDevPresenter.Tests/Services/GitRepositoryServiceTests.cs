@@ -244,6 +244,77 @@ public sealed class GitRepositoryServiceTests
         Assert.Equal(new[] { "main", "release/slides" }, await checkout.Service.GetBranchesAsync(checkout.Source));
     }
 
+    [Fact]
+    public async Task PrepareAsync_LocalFolderWithoutBranch_ReturnsFolderWithoutGitCommands()
+    {
+        using var checkout = new TestCheckout();
+        var source = LocalSource(checkout.Path);
+
+        var result = await checkout.Service.PrepareAsync(source, _ => throw new InvalidOperationException());
+
+        Assert.Equal(checkout.Path, result.Directory);
+        Assert.Null(result.Message);
+        Assert.Empty(checkout.Client.Commands);
+    }
+
+    [Fact]
+    public async Task PrepareAsync_LocalFolderDifferentBranch_AsksBeforeSwitchingWithoutFetch()
+    {
+        using var checkout = new TestCheckout();
+        var source = LocalSource(checkout.Path);
+        source.Branch = "release/slides";
+        string? prompt = null;
+
+        var result = await checkout.Service.PrepareAsync(source, message =>
+        {
+            prompt = message;
+            return Task.FromResult(true);
+        });
+
+        Assert.Contains("from main to release/slides", prompt);
+        Assert.Null(result.Directory);
+        Assert.Equal(new[] { "-C", checkout.Path, "switch", "--", "release/slides" }, Assert.Single(checkout.Client.TerminalCommands));
+        Assert.DoesNotContain(checkout.Client.Commands, command => command[0] is "fetch" or "remote");
+    }
+
+    [Fact]
+    public async Task PrepareAsync_LocalFolderDirty_KeepsFolderAvailable()
+    {
+        using var checkout = new TestCheckout();
+        var source = LocalSource(checkout.Path);
+        source.Branch = "release/slides";
+        checkout.Client.WorkingChanges = " M slides.md";
+
+        var result = await checkout.Service.PrepareAsync(source, _ => throw new InvalidOperationException());
+
+        Assert.Equal(checkout.Path, result.Directory);
+        Assert.Contains("Commit or stash them manually", result.Message);
+        Assert.Empty(checkout.Client.TerminalCommands);
+    }
+
+    [Fact]
+    public async Task LocalFolderNotRepository_HasNoCurrentBranchOrBranches()
+    {
+        using var checkout = new TestCheckout();
+        checkout.Client.RepositoryExitCode = 1;
+        var source = LocalSource(checkout.Path);
+
+        Assert.Null(await checkout.Service.GetCurrentBranchAsync(source));
+        Assert.Empty(await checkout.Service.GetBranchesAsync(source));
+    }
+
+    [Fact]
+    public async Task LocalFolderRepository_ReturnsCurrentBranch()
+    {
+        using var checkout = new TestCheckout();
+        Assert.Equal("main", await checkout.Service.GetCurrentBranchAsync(LocalSource(checkout.Path)));
+    }
+
+    private static PresentationSource LocalSource(string path) => new()
+    {
+        Id = Guid.NewGuid(), Name = "Local", Type = PresentationSourceType.LocalRoot, Location = path
+    };
+
     private sealed class TestCheckout : IDisposable
     {
         private readonly string _root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "presenter-git-tests-" + Guid.NewGuid());

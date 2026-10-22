@@ -12,6 +12,7 @@ public static class WebViewKeyboardBridge
 {
     public const string EscapeMessage = "sdp:escape";
     public const string BlankMessage = "sdp:blank";
+    public const string BlankWhiteMessage = "sdp:blank-white";
     public const string RestoreMessage = "sdp:restore";
 
     public const string EscapeScript =
@@ -59,7 +60,7 @@ public static class WebViewKeyboardBridge
                     blankScreen.style.cssText='position:fixed;inset:0;width:100%;height:100%;z-index:2147483647;pointer-events:auto;';
                     blankScreen.style.backgroundColor=key==='w'?'white':'black';
                     (document.fullscreenElement||document.body).appendChild(blankScreen);
-                    notify('sdp:blank');
+                    notify(key==='w'?'sdp:blank-white':'sdp:blank');
                 }else if(key==='n'||key==='p'){
                     consume();
                     const direction=key==='p'?'ArrowLeft':'ArrowRight';
@@ -124,9 +125,12 @@ public static class WebViewKeyboardBridge
     public static bool IsEscapeMessage(string? body) =>
         string.Equals(body?.Trim().Trim('"'), EscapeMessage, StringComparison.Ordinal);
 
+    public static bool IsWhiteBlankMessage(string? body) =>
+        string.Equals(body?.Trim().Trim('"'), BlankWhiteMessage, StringComparison.Ordinal);
+
     public static bool? GetBlankState(string? body) => body?.Trim().Trim('"') switch
     {
-        BlankMessage => true,
+        BlankMessage or BlankWhiteMessage => true,
         RestoreMessage => false,
         _ => null
     };
