@@ -2,6 +2,31 @@
 
 SlideDevPresenter is a local desktop host for Slidev presentations. It provides a PowerPoint-like experience for developers by combining a presentation library, Slidev process hosting, embedded Presenter View, participant display management, settings, thumbnails, agenda, and timer support.
 
+## Install and Update
+
+Download an installer from [GitHub Releases](https://github.com/norschel/SlidevPresenter/releases/latest):
+
+- **Windows x64**: run the `win-x64` Setup executable. Installation is per-user; the installer also checks for the Microsoft Edge WebView2 runtime used by the embedded browser.
+- **macOS Intel**: run the `osx-x64` `.pkg` installer.
+- **macOS Apple Silicon**: run the `osx-arm64` `.pkg` installer.
+
+The .NET runtime is included. Node.js and the presentation's package manager are still required for local presentations; Git is required only for repository sources. Settings and checkouts are stored outside the installation and are retained during updates.
+
+Open **About > Check for updates**, then **Download update**, then **Restart and install**. Restarting stops the current presentation and saves settings first. Updates come from published stable releases by default, matching the installed platform/architecture. Enable **Include pre-release (unstable) versions** in About to also consider GitHub pre-releases, which may contain bugs. This choice applies only while that About window is open; changing it requires checking again, even if an update was already downloaded. Turning it off does not downgrade an installed pre-release; it offers a newer stable release when available. Nothing is downloaded or restarted automatically. Development builds do not enable in-app updates. If an update fails, retry or run the latest installer for the same architecture.
+
+### Publishing a Release
+
+Push a version tag such as `v1.2.3` or `v1.3.0-beta.1`. The **Package desktop release** workflow builds and tests the solution, then packages self-contained Windows x64 and macOS x64/arm64 apps with Velopack. The tag supplies both the application and package version. SemVer pre-release suffixes mark the draft as a GitHub pre-release; keep that flag when publishing so stable-only users do not receive unstable versions. Pre-releases use the same architecture channels and require no changes to signing configuration. To install an unstable version manually, browse [all releases](https://github.com/norschel/SlidevPresenter/releases) rather than the latest-stable download link.
+
+The workflow creates a **draft** GitHub Release after all three packages succeed. Review the notes and test installation, launch, embedded browser, uninstall, and an update from the previous version on each platform before publishing the draft. Reruns can replace draft assets, but refuse to overwrite a published release. Keep all generated assets attached, including update feeds (`releases.*.json`) and full `.nupkg` packages: the in-app updater needs them. Channels are `win-x64`, `osx-x64`, and `osx-arm64`; do not rename channels or the package ID between releases. Full packages are used, so no previous release is needed when packaging.
+
+**Signing:** without signing secrets the workflow produces unsigned installers and does not bypass OS security checks. Windows may show SmartScreen warnings; macOS may block unsigned/unnotarized apps. For trusted public distribution, configure these GitHub Actions repository secrets before pushing the tag:
+
+- Windows: `WINDOWS_CERTIFICATE_PFX` (base64-encoded Authenticode PFX) and `WINDOWS_CERTIFICATE_PASSWORD`. The workflow imports it into the ephemeral runner's user certificate store; Velopack signs and timestamps the application and installer.
+- macOS: `MACOS_CERTIFICATE_P12` (base64-encoded export containing both Developer ID Application and Developer ID Installer certificates/private keys), `MACOS_CERTIFICATE_PASSWORD`, `MACOS_SIGN_APP_IDENTITY`, and `MACOS_SIGN_INSTALL_IDENTITY`. Supply the identity names without the parenthesized team suffix, as required by Velopack. Set `MACOS_APPLE_ID`, `MACOS_APPLE_PASSWORD` (app-specific password), and `MACOS_TEAM_ID` for notarization. The workflow uses a temporary keychain and removes it after packaging.
+
+Never commit certificates or credentials. Providing a certificate enables signing; invalid or incomplete signing configuration fails the job rather than silently publishing unsigned output. See [Velopack signing](https://docs.velopack.io/packaging/signing) and [macOS packaging](https://docs.velopack.io/packaging/operating-systems/macos). Signed/notarized installers still need native-platform verification; a successful cross-publish alone does not verify installation or updating.
+
 ## Presentation Sources
 
 Open **Library > Sources...** (or **Settings > Sources**) to add, edit, disable or remove sources, then select **Save**. Supported types:
