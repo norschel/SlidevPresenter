@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Velopack;
 using Velopack.Sources;
 
@@ -26,7 +27,7 @@ public sealed class AppUpdateService : IAppUpdateService
             return null;
 
         _update = null;
-        _manager = new UpdateManager(new GithubSource("https://github.com/norschel/SlidevPresenter", null, includePrereleases));
+        _manager = new UpdateManager(new StableGithubSource("https://github.com/norschel/SlidevPresenter", null, includePrereleases));
         _update = await _manager.CheckForUpdatesAsync();
         return _update?.TargetFullRelease.Version.ToString();
     }
@@ -36,4 +37,38 @@ public sealed class AppUpdateService : IAppUpdateService
 
     public void PrepareRestart() =>
         _manager!.WaitExitThenApplyUpdates(_update!.TargetFullRelease, restart: true);
+}
+
+internal class StableGithubSource : GithubSource
+{
+    public StableGithubSource(string repoUrl, string? accessToken, bool prerelease, IFileDownloader? downloader = null)
+        : base(repoUrl, accessToken, prerelease, downloader)
+    {
+    }
+
+    protected override async Task<GithubRelease[]> GetReleases(bool includePrereleases)
+    {
+        if (includePrereleases)
+            return await base.GetReleases(true).ConfigureAwait(false);
+
+        const int pageSize = 100;
+        for (var page = 1; ; page++)
+        {
+            var releasesUri = new Uri(GetApiBaseUrl(RepoUri),
+                $"repos{RepoUri.AbsolutePath}/releases?per_page={pageSize}&page={page}");
+            var response = await Downloader.DownloadString(
+                releasesUri.ToString(),
+                GetRequestHeaders("application/vnd.github.v3+json")
+            ).ConfigureAwait(false);
+            var releases = JsonSerializer.Deserialize<GithubRelease[]>(response) ?? [];
+            var stableRelease = releases
+                .Where(release => !release.Prerelease)
+                .OrderByDescending(release => release.PublishedAt)
+                .FirstOrDefault();
+            if (stableRelease is not null)
+                return [stableRelease];
+            if (releases.Length < pageSize)
+                return [];
+        }
+    }
 }
