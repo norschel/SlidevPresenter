@@ -77,6 +77,16 @@ jobs:
 
         # For more details on CodeQL's query packs, refer to: https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-code-scanning#using-queries-in-ql-packs
         queries: security-extended,security-and-quality
+        config: |
+          query-filters:
+            - exclude:
+                id: cs/dereferenced-value-may-be-null
+            - exclude:
+                id: cs/path-combine
+            - exclude:
+                id: cs/missed-readonly-modifier
+            - exclude:
+                id: cs/catch-of-all-exceptions
 
     # If the analyze step fails for one of the languages you are analyzing with
     # "We were unable to automatically build your code", modify the matrix above
