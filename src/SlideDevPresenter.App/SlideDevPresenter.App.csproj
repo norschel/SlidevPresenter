@@ -20,8 +20,8 @@
     </PackageReference>
     <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.1" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.13" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.13" />
   </ItemGroup>
 
