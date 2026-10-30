@@ -14,8 +14,7 @@ targets:
   - opencode
   - windsurf
 dependencies:
-  apm:
-    - mubaidr/gem-team
+  apm: []
   mcp: []
 includes: auto
 scripts: {}
