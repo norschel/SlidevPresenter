@@ -1,0 +1,716 @@
+lockfile_version: '1'
+apm_version: 0.35.0
+dependencies:
+- repo_url: mubaidr/gem-team
+  name: gem-team
+  host: github.com
+  resolved_commit: 4edcc760e4be06663f1285056694ceab9b324243
+  version: 1.139.0
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/gem-devops-guidelines
+  - .agents/skills/gem-devops-guidelines/SKILL.md
+  - .claude/agents/gem-browser-tester.md
+  - .claude/agents/gem-code-simplifier.md
+  - .claude/agents/gem-debugger.md
+  - .claude/agents/gem-devops.md
+  - .claude/agents/gem-documentation-writer.md
+  - .claude/agents/gem-implementer.md
+  - .claude/agents/gem-mobile-tester.md
+  - .claude/agents/gem-orchestrator.md
+  - .claude/agents/gem-planner.md
+  - .claude/agents/gem-researcher.md
+  - .claude/agents/gem-reviewer.md
+  - .claude/agents/gem-skill-creator.md
+  - .claude/skills/gem-devops-guidelines
+  - .claude/skills/gem-devops-guidelines/SKILL.md
+  - .codex/agents/gem-browser-tester.toml
+  - .codex/agents/gem-code-simplifier.toml
+  - .codex/agents/gem-debugger.toml
+  - .codex/agents/gem-devops.toml
+  - .codex/agents/gem-documentation-writer.toml
+  - .codex/agents/gem-implementer.toml
+  - .codex/agents/gem-mobile-tester.toml
+  - .codex/agents/gem-orchestrator.toml
+  - .codex/agents/gem-planner.toml
+  - .codex/agents/gem-researcher.toml
+  - .codex/agents/gem-reviewer.toml
+  - .codex/agents/gem-skill-creator.toml
+  - .cursor/agents/gem-browser-tester.md
+  - .cursor/agents/gem-code-simplifier.md
+  - .cursor/agents/gem-debugger.md
+  - .cursor/agents/gem-devops.md
+  - .cursor/agents/gem-documentation-writer.md
+  - .cursor/agents/gem-implementer.md
+  - .cursor/agents/gem-mobile-tester.md
+  - .cursor/agents/gem-orchestrator.md
+  - .cursor/agents/gem-planner.md
+  - .cursor/agents/gem-researcher.md
+  - .cursor/agents/gem-reviewer.md
+  - .cursor/agents/gem-skill-creator.md
+  - .github/agents/gem-browser-tester.agent.md
+  - .github/agents/gem-code-simplifier.agent.md
+  - .github/agents/gem-debugger.agent.md
+  - .github/agents/gem-devops.agent.md
+  - .github/agents/gem-documentation-writer.agent.md
+  - .github/agents/gem-implementer.agent.md
+  - .github/agents/gem-mobile-tester.agent.md
+  - .github/agents/gem-orchestrator.agent.md
+  - .github/agents/gem-planner.agent.md
+  - .github/agents/gem-researcher.agent.md
+  - .github/agents/gem-reviewer.agent.md
+  - .github/agents/gem-skill-creator.agent.md
+  - .opencode/agents/gem-browser-tester.md
+  - .opencode/agents/gem-code-simplifier.md
+  - .opencode/agents/gem-debugger.md
+  - .opencode/agents/gem-devops.md
+  - .opencode/agents/gem-documentation-writer.md
+  - .opencode/agents/gem-implementer.md
+  - .opencode/agents/gem-mobile-tester.md
+  - .opencode/agents/gem-orchestrator.md
+  - .opencode/agents/gem-planner.md
+  - .opencode/agents/gem-researcher.md
+  - .opencode/agents/gem-reviewer.md
+  - .opencode/agents/gem-skill-creator.md
+  deployed_file_hashes:
+    .agents/skills/gem-devops-guidelines/SKILL.md: sha256:b28bf8737f03f44a9e230f538b6a416aaf2d0c1df6c5cd820ed4f77f60421aaa
+    .claude/agents/gem-browser-tester.md: sha256:90d3a8a9c9af291c21b68c322b93515d5b35ce0aab3f103902643d8315c8106e
+    .claude/agents/gem-code-simplifier.md: sha256:c92bb895e4b6ea48b288203606322911645287441b1d9881fc964c8f0a0eb721
+    .claude/agents/gem-debugger.md: sha256:53288041a0ac507beb1db3f04030043f7d387a1070f56313ed9132b2034057ce
+    .claude/agents/gem-devops.md: sha256:914d37e1d65b71740d71ad0b20156ea8868e46447e9f29be4ffe93a22d291e85
+    .claude/agents/gem-documentation-writer.md: sha256:637afb64f138f91f0aa8dab4e6e2251c0b7e17c2a6bd1f9bcfeea58a8fadeb8b
+    .claude/agents/gem-implementer.md: sha256:a9f9488301e42bee65766fc95e7f286d64ab819f9d0a62c30ed86f2f82934139
+    .claude/agents/gem-mobile-tester.md: sha256:faaf99650bc5b42be04af335f08d6a1def49f3ecf10775d4969995be0d8ab8b6
+    .claude/agents/gem-orchestrator.md: sha256:6251da839012958b904ead25b26979b97f23acb2a72c54533ff0c8878211b826
+    .claude/agents/gem-planner.md: sha256:7240289ddbe476d260c0013ad6b04dafea8ac71dd65c8f4c0a1887ab494985c3
+    .claude/agents/gem-researcher.md: sha256:ebac6eff24d48c1b74a9eb994ca2a6e8730ec357b811b536c7a9f43e7fff1399
+    .claude/agents/gem-reviewer.md: sha256:5052c2b4b5a9c11b7317b17fa47a089d82bad0859d9359be4659b236a4f6b57d
+    .claude/agents/gem-skill-creator.md: sha256:78bafe320bfdf8b59a9cec6599d09d70487c57356be111cc9ec7d72c14a9bb05
+    .claude/skills/gem-devops-guidelines/SKILL.md: sha256:b28bf8737f03f44a9e230f538b6a416aaf2d0c1df6c5cd820ed4f77f60421aaa
+    .codex/agents/gem-browser-tester.toml: sha256:e6114ff2e5f5bd6329880bbccdbfbbabe926ab53a065476d92d7c082200f5da0
+    .codex/agents/gem-code-simplifier.toml: sha256:2ec687b958583dd09b7e7da2600c16bf142901a7fd07a655d04b8b01c1c8ad9f
+    .codex/agents/gem-debugger.toml: sha256:3fb54beaefe0112207f2b30c047725598becb4c3308da8853f69cfdea99a0134
+    .codex/agents/gem-devops.toml: sha256:8e4dac36cfeff38e2168fc5e9df1521b5c050818d8bc8229573ac97cf5997c75
+    .codex/agents/gem-documentation-writer.toml: sha256:5e77818d36142773b9726156f091a21754e3d0b7685f8578aec24e30263273d9
+    .codex/agents/gem-implementer.toml: sha256:103bd76d364054ec847caa9b583d6d9e09e47716052f6b0ce1078d2288e6a98c
+    .codex/agents/gem-mobile-tester.toml: sha256:0370958715c76f6bd2f686d3264df3680955b60f6e740fbe52ac8b97b62c1d28
+    .codex/agents/gem-orchestrator.toml: sha256:25bc46584b182117e69fd259f60e834f25014cd7d7f97d45337da2a23b3abe26
+    .codex/agents/gem-planner.toml: sha256:9faf4ed67a160320b2c364013219ab39ae69c8a6985a74fe8c0efc67e26f98f7
+    .codex/agents/gem-researcher.toml: sha256:c67716cfd2fe9455b5ee20d8f5123a87ef04b8fd40fccb7fe466302c97806d3b
+    .codex/agents/gem-reviewer.toml: sha256:0d61f46a9f9916c6d0176df17311a6f0242fc58a3f60b8506786d85185eeb8be
+    .codex/agents/gem-skill-creator.toml: sha256:86fb81f03d1889236bc00b35cfc3a98100485343cf62b9a284ee0d7771ec1cdf
+    .cursor/agents/gem-browser-tester.md: sha256:90d3a8a9c9af291c21b68c322b93515d5b35ce0aab3f103902643d8315c8106e
+    .cursor/agents/gem-code-simplifier.md: sha256:c92bb895e4b6ea48b288203606322911645287441b1d9881fc964c8f0a0eb721
+    .cursor/agents/gem-debugger.md: sha256:53288041a0ac507beb1db3f04030043f7d387a1070f56313ed9132b2034057ce
+    .cursor/agents/gem-devops.md: sha256:914d37e1d65b71740d71ad0b20156ea8868e46447e9f29be4ffe93a22d291e85
+    .cursor/agents/gem-documentation-writer.md: sha256:637afb64f138f91f0aa8dab4e6e2251c0b7e17c2a6bd1f9bcfeea58a8fadeb8b
+    .cursor/agents/gem-implementer.md: sha256:a9f9488301e42bee65766fc95e7f286d64ab819f9d0a62c30ed86f2f82934139
+    .cursor/agents/gem-mobile-tester.md: sha256:faaf99650bc5b42be04af335f08d6a1def49f3ecf10775d4969995be0d8ab8b6
+    .cursor/agents/gem-orchestrator.md: sha256:6251da839012958b904ead25b26979b97f23acb2a72c54533ff0c8878211b826
+    .cursor/agents/gem-planner.md: sha256:7240289ddbe476d260c0013ad6b04dafea8ac71dd65c8f4c0a1887ab494985c3
+    .cursor/agents/gem-researcher.md: sha256:ebac6eff24d48c1b74a9eb994ca2a6e8730ec357b811b536c7a9f43e7fff1399
+    .cursor/agents/gem-reviewer.md: sha256:5052c2b4b5a9c11b7317b17fa47a089d82bad0859d9359be4659b236a4f6b57d
+    .cursor/agents/gem-skill-creator.md: sha256:78bafe320bfdf8b59a9cec6599d09d70487c57356be111cc9ec7d72c14a9bb05
+    .github/agents/gem-browser-tester.agent.md: sha256:90d3a8a9c9af291c21b68c322b93515d5b35ce0aab3f103902643d8315c8106e
+    .github/agents/gem-code-simplifier.agent.md: sha256:c92bb895e4b6ea48b288203606322911645287441b1d9881fc964c8f0a0eb721
+    .github/agents/gem-debugger.agent.md: sha256:53288041a0ac507beb1db3f04030043f7d387a1070f56313ed9132b2034057ce
+    .github/agents/gem-devops.agent.md: sha256:914d37e1d65b71740d71ad0b20156ea8868e46447e9f29be4ffe93a22d291e85
+    .github/agents/gem-documentation-writer.agent.md: sha256:637afb64f138f91f0aa8dab4e6e2251c0b7e17c2a6bd1f9bcfeea58a8fadeb8b
+    .github/agents/gem-implementer.agent.md: sha256:a9f9488301e42bee65766fc95e7f286d64ab819f9d0a62c30ed86f2f82934139
+    .github/agents/gem-mobile-tester.agent.md: sha256:faaf99650bc5b42be04af335f08d6a1def49f3ecf10775d4969995be0d8ab8b6
+    .github/agents/gem-orchestrator.agent.md: sha256:6251da839012958b904ead25b26979b97f23acb2a72c54533ff0c8878211b826
+    .github/agents/gem-planner.agent.md: sha256:7240289ddbe476d260c0013ad6b04dafea8ac71dd65c8f4c0a1887ab494985c3
+    .github/agents/gem-researcher.agent.md: sha256:ebac6eff24d48c1b74a9eb994ca2a6e8730ec357b811b536c7a9f43e7fff1399
+    .github/agents/gem-reviewer.agent.md: sha256:5052c2b4b5a9c11b7317b17fa47a089d82bad0859d9359be4659b236a4f6b57d
+    .github/agents/gem-skill-creator.agent.md: sha256:78bafe320bfdf8b59a9cec6599d09d70487c57356be111cc9ec7d72c14a9bb05
+    .opencode/agents/gem-browser-tester.md: sha256:90d3a8a9c9af291c21b68c322b93515d5b35ce0aab3f103902643d8315c8106e
+    .opencode/agents/gem-code-simplifier.md: sha256:c92bb895e4b6ea48b288203606322911645287441b1d9881fc964c8f0a0eb721
+    .opencode/agents/gem-debugger.md: sha256:53288041a0ac507beb1db3f04030043f7d387a1070f56313ed9132b2034057ce
+    .opencode/agents/gem-devops.md: sha256:914d37e1d65b71740d71ad0b20156ea8868e46447e9f29be4ffe93a22d291e85
+    .opencode/agents/gem-documentation-writer.md: sha256:637afb64f138f91f0aa8dab4e6e2251c0b7e17c2a6bd1f9bcfeea58a8fadeb8b
+    .opencode/agents/gem-implementer.md: sha256:a9f9488301e42bee65766fc95e7f286d64ab819f9d0a62c30ed86f2f82934139
+    .opencode/agents/gem-mobile-tester.md: sha256:faaf99650bc5b42be04af335f08d6a1def49f3ecf10775d4969995be0d8ab8b6
+    .opencode/agents/gem-orchestrator.md: sha256:6251da839012958b904ead25b26979b97f23acb2a72c54533ff0c8878211b826
+    .opencode/agents/gem-planner.md: sha256:7240289ddbe476d260c0013ad6b04dafea8ac71dd65c8f4c0a1887ab494985c3
+    .opencode/agents/gem-researcher.md: sha256:ebac6eff24d48c1b74a9eb994ca2a6e8730ec357b811b536c7a9f43e7fff1399
+    .opencode/agents/gem-reviewer.md: sha256:5052c2b4b5a9c11b7317b17fa47a089d82bad0859d9359be4659b236a4f6b57d
+    .opencode/agents/gem-skill-creator.md: sha256:78bafe320bfdf8b59a9cec6599d09d70487c57356be111cc9ec7d72c14a9bb05
+  content_hash: sha256:52eba4135cbf0b2ae7f2ad741023af930bb839a3af6bcef09e331ab8136a3d40
+  declared_license: Apache-2.0
+deployments:
+- kind: project-relative
+  target: claude
+  value: .claude/agents/gem-browser-tester.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:90d3a8a9c9af291c21b68c322b93515d5b35ce0aab3f103902643d8315c8106e
+- kind: project-relative
+  target: claude
+  value: .claude/agents/gem-code-simplifier.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:c92bb895e4b6ea48b288203606322911645287441b1d9881fc964c8f0a0eb721
+- kind: project-relative
+  target: claude
+  value: .claude/agents/gem-debugger.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:53288041a0ac507beb1db3f04030043f7d387a1070f56313ed9132b2034057ce
+- kind: project-relative
+  target: claude
+  value: .claude/agents/gem-devops.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:914d37e1d65b71740d71ad0b20156ea8868e46447e9f29be4ffe93a22d291e85
+- kind: project-relative
+  target: claude
+  value: .claude/agents/gem-documentation-writer.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:637afb64f138f91f0aa8dab4e6e2251c0b7e17c2a6bd1f9bcfeea58a8fadeb8b
+- kind: project-relative
+  target: claude
+  value: .claude/agents/gem-implementer.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:a9f9488301e42bee65766fc95e7f286d64ab819f9d0a62c30ed86f2f82934139
+- kind: project-relative
+  target: claude
+  value: .claude/agents/gem-mobile-tester.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:faaf99650bc5b42be04af335f08d6a1def49f3ecf10775d4969995be0d8ab8b6
+- kind: project-relative
+  target: claude
+  value: .claude/agents/gem-orchestrator.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:6251da839012958b904ead25b26979b97f23acb2a72c54533ff0c8878211b826
+- kind: project-relative
+  target: claude
+  value: .claude/agents/gem-planner.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:7240289ddbe476d260c0013ad6b04dafea8ac71dd65c8f4c0a1887ab494985c3
+- kind: project-relative
+  target: claude
+  value: .claude/agents/gem-researcher.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:ebac6eff24d48c1b74a9eb994ca2a6e8730ec357b811b536c7a9f43e7fff1399
+- kind: project-relative
+  target: claude
+  value: .claude/agents/gem-reviewer.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:5052c2b4b5a9c11b7317b17fa47a089d82bad0859d9359be4659b236a4f6b57d
+- kind: project-relative
+  target: claude
+  value: .claude/agents/gem-skill-creator.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:78bafe320bfdf8b59a9cec6599d09d70487c57356be111cc9ec7d72c14a9bb05
+- kind: project-relative
+  target: claude
+  value: .claude/skills/gem-devops-guidelines
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/gem-devops-guidelines/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:b28bf8737f03f44a9e230f538b6a416aaf2d0c1df6c5cd820ed4f77f60421aaa
+- kind: project-relative
+  target: codex
+  value: .agents/skills/gem-devops-guidelines
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: null
+- kind: project-relative
+  target: codex
+  value: .agents/skills/gem-devops-guidelines/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:b28bf8737f03f44a9e230f538b6a416aaf2d0c1df6c5cd820ed4f77f60421aaa
+- kind: project-relative
+  target: codex
+  value: .codex/agents/gem-browser-tester.toml
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:e6114ff2e5f5bd6329880bbccdbfbbabe926ab53a065476d92d7c082200f5da0
+- kind: project-relative
+  target: codex
+  value: .codex/agents/gem-code-simplifier.toml
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:2ec687b958583dd09b7e7da2600c16bf142901a7fd07a655d04b8b01c1c8ad9f
+- kind: project-relative
+  target: codex
+  value: .codex/agents/gem-debugger.toml
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:3fb54beaefe0112207f2b30c047725598becb4c3308da8853f69cfdea99a0134
+- kind: project-relative
+  target: codex
+  value: .codex/agents/gem-devops.toml
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:8e4dac36cfeff38e2168fc5e9df1521b5c050818d8bc8229573ac97cf5997c75
+- kind: project-relative
+  target: codex
+  value: .codex/agents/gem-documentation-writer.toml
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:5e77818d36142773b9726156f091a21754e3d0b7685f8578aec24e30263273d9
+- kind: project-relative
+  target: codex
+  value: .codex/agents/gem-implementer.toml
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:103bd76d364054ec847caa9b583d6d9e09e47716052f6b0ce1078d2288e6a98c
+- kind: project-relative
+  target: codex
+  value: .codex/agents/gem-mobile-tester.toml
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:0370958715c76f6bd2f686d3264df3680955b60f6e740fbe52ac8b97b62c1d28
+- kind: project-relative
+  target: codex
+  value: .codex/agents/gem-orchestrator.toml
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:25bc46584b182117e69fd259f60e834f25014cd7d7f97d45337da2a23b3abe26
+- kind: project-relative
+  target: codex
+  value: .codex/agents/gem-planner.toml
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:9faf4ed67a160320b2c364013219ab39ae69c8a6985a74fe8c0efc67e26f98f7
+- kind: project-relative
+  target: codex
+  value: .codex/agents/gem-researcher.toml
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:c67716cfd2fe9455b5ee20d8f5123a87ef04b8fd40fccb7fe466302c97806d3b
+- kind: project-relative
+  target: codex
+  value: .codex/agents/gem-reviewer.toml
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:0d61f46a9f9916c6d0176df17311a6f0242fc58a3f60b8506786d85185eeb8be
+- kind: project-relative
+  target: codex
+  value: .codex/agents/gem-skill-creator.toml
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:86fb81f03d1889236bc00b35cfc3a98100485343cf62b9a284ee0d7771ec1cdf
+- kind: project-relative
+  target: copilot
+  value: .github/agents/gem-browser-tester.agent.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:90d3a8a9c9af291c21b68c322b93515d5b35ce0aab3f103902643d8315c8106e
+- kind: project-relative
+  target: copilot
+  value: .github/agents/gem-code-simplifier.agent.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:c92bb895e4b6ea48b288203606322911645287441b1d9881fc964c8f0a0eb721
+- kind: project-relative
+  target: copilot
+  value: .github/agents/gem-debugger.agent.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:53288041a0ac507beb1db3f04030043f7d387a1070f56313ed9132b2034057ce
+- kind: project-relative
+  target: copilot
+  value: .github/agents/gem-devops.agent.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:914d37e1d65b71740d71ad0b20156ea8868e46447e9f29be4ffe93a22d291e85
+- kind: project-relative
+  target: copilot
+  value: .github/agents/gem-documentation-writer.agent.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:637afb64f138f91f0aa8dab4e6e2251c0b7e17c2a6bd1f9bcfeea58a8fadeb8b
+- kind: project-relative
+  target: copilot
+  value: .github/agents/gem-implementer.agent.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:a9f9488301e42bee65766fc95e7f286d64ab819f9d0a62c30ed86f2f82934139
+- kind: project-relative
+  target: copilot
+  value: .github/agents/gem-mobile-tester.agent.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:faaf99650bc5b42be04af335f08d6a1def49f3ecf10775d4969995be0d8ab8b6
+- kind: project-relative
+  target: copilot
+  value: .github/agents/gem-orchestrator.agent.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:6251da839012958b904ead25b26979b97f23acb2a72c54533ff0c8878211b826
+- kind: project-relative
+  target: copilot
+  value: .github/agents/gem-planner.agent.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:7240289ddbe476d260c0013ad6b04dafea8ac71dd65c8f4c0a1887ab494985c3
+- kind: project-relative
+  target: copilot
+  value: .github/agents/gem-researcher.agent.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:ebac6eff24d48c1b74a9eb994ca2a6e8730ec357b811b536c7a9f43e7fff1399
+- kind: project-relative
+  target: copilot
+  value: .github/agents/gem-reviewer.agent.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:5052c2b4b5a9c11b7317b17fa47a089d82bad0859d9359be4659b236a4f6b57d
+- kind: project-relative
+  target: copilot
+  value: .github/agents/gem-skill-creator.agent.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:78bafe320bfdf8b59a9cec6599d09d70487c57356be111cc9ec7d72c14a9bb05
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/gem-browser-tester.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:90d3a8a9c9af291c21b68c322b93515d5b35ce0aab3f103902643d8315c8106e
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/gem-code-simplifier.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:c92bb895e4b6ea48b288203606322911645287441b1d9881fc964c8f0a0eb721
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/gem-debugger.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:53288041a0ac507beb1db3f04030043f7d387a1070f56313ed9132b2034057ce
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/gem-devops.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:914d37e1d65b71740d71ad0b20156ea8868e46447e9f29be4ffe93a22d291e85
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/gem-documentation-writer.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:637afb64f138f91f0aa8dab4e6e2251c0b7e17c2a6bd1f9bcfeea58a8fadeb8b
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/gem-implementer.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:a9f9488301e42bee65766fc95e7f286d64ab819f9d0a62c30ed86f2f82934139
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/gem-mobile-tester.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:faaf99650bc5b42be04af335f08d6a1def49f3ecf10775d4969995be0d8ab8b6
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/gem-orchestrator.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:6251da839012958b904ead25b26979b97f23acb2a72c54533ff0c8878211b826
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/gem-planner.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:7240289ddbe476d260c0013ad6b04dafea8ac71dd65c8f4c0a1887ab494985c3
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/gem-researcher.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:ebac6eff24d48c1b74a9eb994ca2a6e8730ec357b811b536c7a9f43e7fff1399
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/gem-reviewer.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:5052c2b4b5a9c11b7317b17fa47a089d82bad0859d9359be4659b236a4f6b57d
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/gem-skill-creator.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:78bafe320bfdf8b59a9cec6599d09d70487c57356be111cc9ec7d72c14a9bb05
+- kind: project-relative
+  target: opencode
+  value: .opencode/agents/gem-browser-tester.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:90d3a8a9c9af291c21b68c322b93515d5b35ce0aab3f103902643d8315c8106e
+- kind: project-relative
+  target: opencode
+  value: .opencode/agents/gem-code-simplifier.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:c92bb895e4b6ea48b288203606322911645287441b1d9881fc964c8f0a0eb721
+- kind: project-relative
+  target: opencode
+  value: .opencode/agents/gem-debugger.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:53288041a0ac507beb1db3f04030043f7d387a1070f56313ed9132b2034057ce
+- kind: project-relative
+  target: opencode
+  value: .opencode/agents/gem-devops.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:914d37e1d65b71740d71ad0b20156ea8868e46447e9f29be4ffe93a22d291e85
+- kind: project-relative
+  target: opencode
+  value: .opencode/agents/gem-documentation-writer.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:637afb64f138f91f0aa8dab4e6e2251c0b7e17c2a6bd1f9bcfeea58a8fadeb8b
+- kind: project-relative
+  target: opencode
+  value: .opencode/agents/gem-implementer.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:a9f9488301e42bee65766fc95e7f286d64ab819f9d0a62c30ed86f2f82934139
+- kind: project-relative
+  target: opencode
+  value: .opencode/agents/gem-mobile-tester.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:faaf99650bc5b42be04af335f08d6a1def49f3ecf10775d4969995be0d8ab8b6
+- kind: project-relative
+  target: opencode
+  value: .opencode/agents/gem-orchestrator.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:6251da839012958b904ead25b26979b97f23acb2a72c54533ff0c8878211b826
+- kind: project-relative
+  target: opencode
+  value: .opencode/agents/gem-planner.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:7240289ddbe476d260c0013ad6b04dafea8ac71dd65c8f4c0a1887ab494985c3
+- kind: project-relative
+  target: opencode
+  value: .opencode/agents/gem-researcher.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:ebac6eff24d48c1b74a9eb994ca2a6e8730ec357b811b536c7a9f43e7fff1399
+- kind: project-relative
+  target: opencode
+  value: .opencode/agents/gem-reviewer.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:5052c2b4b5a9c11b7317b17fa47a089d82bad0859d9359be4659b236a4f6b57d
+- kind: project-relative
+  target: opencode
+  value: .opencode/agents/gem-skill-creator.md
+  runtime: null
+  scope: project
+  owners:
+  - mubaidr/gem-team
+  active_owner: mubaidr/gem-team
+  content_hash: sha256:78bafe320bfdf8b59a9cec6599d09d70487c57356be111cc9ec7d72c14a9bb05
