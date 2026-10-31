@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -7,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using CommunityToolkit.Mvvm.Input;
 using SlideDevPresenter.App.Services;
 using SlideDevPresenter.App.ViewModels;
 using SlideDevPresenter.App.Views;
@@ -22,6 +24,9 @@ public partial class MainWindow : Window
     private readonly WebViewNavigationPolicy _navigationPolicy;
     private readonly PresentationWindowService? _presentationWindowService;
     private readonly List<KeyBinding> _presentationKeyBindings = [];
+    private readonly List<RelayCommand> _menuStateCommands = [];
+    private NativeMenu? _applicationMenu;
+    private Window? _openDialog;
 
     // Native WebView controls render in their own OS airspace and ignore a collapsed Avalonia
     // parent on macOS, so toggling IsVisible leaves the native surface painting over the other
@@ -77,14 +82,13 @@ public partial class MainWindow : Window
     private async void Settings_Click(object? sender, RoutedEventArgs e)
         => await OpenSettingsAsync();
 
-    private async Task OpenSettingsAsync()
+    internal async Task OpenSettingsAsync()
     {
-        if (_viewModel is null)
+        if (_viewModel is null || TryActivateOpenDialog())
             return;
 
         var vm = new SettingsViewModel(_viewModel.SettingsService, _themeService);
-        var win = new SettingsWindow(vm);
-        await win.ShowDialog(this);
+        await ShowDialogOnceAsync(new SettingsWindow(vm));
         _viewModel.RefreshPreferences();
         ReconfigureShortcuts();
         await _viewModel.RefreshLibraryAsync();
@@ -93,9 +97,36 @@ public partial class MainWindow : Window
     private async void About_Click(object? sender, RoutedEventArgs e)
         => await OpenAboutAsync();
 
-    private async Task OpenAboutAsync()
+    internal async Task OpenAboutAsync()
     {
-        await new AboutWindow(_viewModel?.AppVersion ?? "unknown").ShowDialog(this);
+        if (TryActivateOpenDialog())
+            return;
+
+        await ShowDialogOnceAsync(new AboutWindow(_viewModel?.AppVersion ?? "unknown"));
+    }
+
+    // The macOS application menu stays enabled while a modal dialog is key, so About/Settings… must
+    // not stack a second dialog on top of the one that is already open.
+    private bool TryActivateOpenDialog()
+    {
+        if (_openDialog is null)
+            return false;
+
+        _openDialog.Activate();
+        return true;
+    }
+
+    private async Task ShowDialogOnceAsync(Window dialog)
+    {
+        _openDialog = dialog;
+        try
+        {
+            await dialog.ShowDialog(this);
+        }
+        finally
+        {
+            _openDialog = null;
+        }
     }
 
     private void ConfigureNativeApplicationMenu()
@@ -103,24 +134,109 @@ public partial class MainWindow : Window
         if (!OperatingSystem.IsMacOS())
             return;
 
-        var menu = ApplicationMenuFactory.Create(
-            isMacOS: true,
-            openSettings: () => _ = OpenSettingsAsync(),
-            openAbout: () => _ = OpenAboutAsync(),
-            restoreChrome: () =>
-            {
-                if (_viewModel?.RestoreChromeCommand.CanExecute(null) == true)
-                    _ = _viewModel.RestoreChromeCommand.ExecuteAsync(null);
-            },
-            quit: QuitApplication);
-        NativeMenu.SetMenu(this, menu);
+        _applicationMenu = ApplicationMenuFactory.Create(isMacOS: true, CreateApplicationMenuCommands());
+        NativeMenu.SetMenu(this, _applicationMenu);
     }
 
-    private static void QuitApplication()
+    private ApplicationMenuCommands CreateApplicationMenuCommands()
     {
-        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-            desktop.Shutdown();
+        var viewModel = _viewModel;
+        Func<bool> canStart = () => _viewModel?.CanStartSelectedPresentation == true;
+        Func<bool> canOpenInBrowser = () => _viewModel?.CanShowBrowserFallback == true;
+
+        return new ApplicationMenuCommands
+        {
+            RefreshLibrary = Forward(viewModel?.RefreshLibraryCommand),
+            ImportLibrary = new RelayCommand(() => _ = ImportLibraryAsync()),
+            ExportLibrary = new RelayCommand(() => _ = ExportLibraryAsync()),
+            OpenDeckLocation = Forward(viewModel?.OpenSelectedProjectLocationCommand),
+            CopyDeckLocation = Gated(() => _ = CopyProjectLocationAsync(), () => _viewModel?.SelectedProject is not null),
+            OpenInVsCode = Forward(viewModel?.EditSelectedProjectCommand),
+            ExportPdf = Gated(() => _ = ExportPdfAsync(), () => _viewModel?.CanExportPdf == true),
+            RemoveFromLibrary = Forward(viewModel?.RemoveSelectedProjectFromLibraryCommand),
+
+            StartFromBeginning = GatedViewModelCommand(viewModel?.StartFromBeginningCommand, canStart),
+            StartFromCurrentSlide = GatedViewModelCommand(viewModel?.StartFromCurrentSlideCommand, canStart),
+            StartPresenterView = GatedViewModelCommand(viewModel?.StartPresenterViewCommand, canStart),
+            StartFromBeginningGesture = _shortcutService.GetGesture(PresentationShortcutAction.StartFromBeginning),
+            StartFromCurrentSlideGesture = _shortcutService.GetGesture(PresentationShortcutAction.StartFromCurrentSlide),
+            StartPresenterViewGesture = _shortcutService.GetGesture(PresentationShortcutAction.StartPresenterView),
+            Resume = Forward(viewModel?.ResumeCommand),
+            Stop = Forward(viewModel?.StopCommand),
+            Retry = Forward(viewModel?.RetryCommand),
+            SwapDisplays = Forward(viewModel?.SwapDisplaysCommand),
+            DetectDisplays = Forward(viewModel?.DetectDisplaysCommand),
+
+            ShowHomeTab = Forward(viewModel?.SelectHomeRibbonCommand),
+            ShowLibraryTab = Forward(viewModel?.SelectLibraryRibbonCommand),
+            ShowViewTab = Forward(viewModel?.SelectViewRibbonCommand),
+            ShowPresentationTab = Forward(viewModel?.SelectPresentationRibbonCommand),
+            ShowBrowserTab = Forward(viewModel?.SelectBrowserRibbonCommand),
+            UsePresenterSurface = Forward(viewModel?.UsePresenterSurfaceCommand),
+            UseParticipantSurface = Forward(viewModel?.UseParticipantSurfaceCommand),
+            ToggleThumbnailsPanel = Forward(viewModel?.ToggleThumbnailsPanelCommand),
+            ToggleAgendaPanel = Forward(viewModel?.ToggleAgendaPanelCommand),
+            ToggleTimerPanel = Forward(viewModel?.ToggleTimerPanelCommand),
+            RestoreChrome = GatedViewModelCommand(viewModel?.RestoreChromeCommand, () => _viewModel?.CanRestoreChrome == true),
+            OpenCurrentViewInBrowser = GatedViewModelCommand(viewModel?.OpenCurrentSurfaceInBrowserCommand, canOpenInBrowser),
+            OpenPresenterInBrowser = GatedViewModelCommand(viewModel?.OpenPresenterBrowserCommand, canOpenInBrowser),
+            OpenParticipantInBrowser = GatedViewModelCommand(viewModel?.OpenParticipantBrowserCommand, canOpenInBrowser),
+
+            Minimize = new RelayCommand(MinimizeActiveWindow),
+            Zoom = new RelayCommand(ZoomActiveWindow),
+
+            ShowKeyboardShortcuts = new RelayCommand(() => _ = OpenSettingsAsync()),
+            OpenDocumentation = new RelayCommand(() => _browserLauncher.Open(new Uri("https://sli.dev"))),
+            ReportIssue = new RelayCommand(() => _browserLauncher.Open(new Uri("https://github.com/norschel/SlidevPresenter/issues")))
+        };
     }
+
+    // The designer constructor has no view model, so its menu entries are disabled no-ops.
+    private static ICommand Forward(ICommand? command)
+        => command ?? new RelayCommand(() => { }, () => false);
+
+    // NativeMenuItem only re-evaluates IsEnabled when its command raises CanExecuteChanged, so
+    // commands whose availability is driven by view-model state are tracked and refreshed.
+    private RelayCommand Gated(Action execute, Func<bool> canExecute)
+    {
+        var command = new RelayCommand(execute, canExecute);
+        _menuStateCommands.Add(command);
+        return command;
+    }
+
+    private RelayCommand GatedViewModelCommand(ICommand? command, Func<bool> canExecute)
+        => Gated(
+            () =>
+            {
+                if (command?.CanExecute(null) == true)
+                    command.Execute(null);
+            },
+            canExecute);
+
+    private void RefreshApplicationMenuState()
+    {
+        foreach (var command in _menuStateCommands)
+            command.NotifyCanExecuteChanged();
+    }
+
+    private void MinimizeActiveWindow()
+    {
+        var window = GetActiveWindow();
+        if (window.WindowState != WindowState.FullScreen)
+            window.WindowState = WindowState.Minimized;
+    }
+
+    private void ZoomActiveWindow()
+    {
+        var window = GetActiveWindow();
+        if (window.WindowState == WindowState.FullScreen)
+            return;
+
+        window.WindowState = window.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    }
+
+    private Window GetActiveWindow()
+        => (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Windows.FirstOrDefault(window => window.IsActive) ?? this;
 
     private void BrowserTab_Click(object? sender, RoutedEventArgs e)
     {
@@ -191,6 +307,9 @@ public partial class MainWindow : Window
     }
 
     private async void ExportPdf_Click(object? sender, RoutedEventArgs e)
+        => await ExportPdfAsync();
+
+    private async Task ExportPdfAsync()
     {
         if (_viewModel is null || !_viewModel.CanExportPdf)
             return;
@@ -214,6 +333,9 @@ public partial class MainWindow : Window
     }
 
     private async void ExportLibrary_Click(object? sender, RoutedEventArgs e)
+        => await ExportLibraryAsync();
+
+    private async Task ExportLibraryAsync()
     {
         if (_viewModel is null)
             return;
@@ -245,6 +367,9 @@ public partial class MainWindow : Window
     }
 
     private async void ImportLibrary_Click(object? sender, RoutedEventArgs e)
+        => await ImportLibraryAsync();
+
+    private async Task ImportLibraryAsync()
     {
         if (_viewModel is null)
             return;
@@ -270,6 +395,9 @@ public partial class MainWindow : Window
     }
 
     private async void CopyProjectLocation_Click(object? sender, RoutedEventArgs e)
+        => await CopyProjectLocationAsync();
+
+    private async Task CopyProjectLocationAsync()
     {
         if (_viewModel?.SelectedProject is null || Clipboard is null)
             return;
@@ -336,6 +464,13 @@ public partial class MainWindow : Window
                 break;
             case nameof(MainViewModel.IsBrowserSurfaceVisible):
                 SyncBrowserWebViewAttachment();
+                break;
+            case nameof(MainViewModel.CanStartSelectedPresentation):
+            case nameof(MainViewModel.CanShowBrowserFallback):
+            case nameof(MainViewModel.CanExportPdf):
+            case nameof(MainViewModel.CanRestoreChrome):
+            case nameof(MainViewModel.SelectedProject):
+                RefreshApplicationMenuState();
                 break;
         }
     }
@@ -536,6 +671,15 @@ public partial class MainWindow : Window
     {
         ConfigureShortcutBindings();
         ConfigureShortcutTooltips();
+
+        if (_applicationMenu is not null)
+        {
+            ApplicationMenuFactory.UpdateStartGestures(
+                _applicationMenu,
+                _shortcutService.GetGesture(PresentationShortcutAction.StartFromBeginning),
+                _shortcutService.GetGesture(PresentationShortcutAction.StartFromCurrentSlide),
+                _shortcutService.GetGesture(PresentationShortcutAction.StartPresenterView));
+        }
     }
 
     private void AttachEscapeHandler()

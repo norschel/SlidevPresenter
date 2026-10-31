@@ -16,6 +16,7 @@ This document tracks the implementation direction for SlideDevPresenter. The MVP
 - Slide deck metadata reading (title, slide list, summaries) and PDF export via Slidev
 - Editing integration with VS Code (Stable/Insiders) for local and checked-out projects
 - Settings window (sources, editor, navigation shortcuts, theme) persisted as JSON
+- Native macOS menu bar (app, File, Presentation, View, Window, Help) that mirrors ribbon actions with ⌘ shortcuts; Windows and Linux use the in-window ribbon only
 - Unit tests for Core/Infrastructure services and ViewModel command logic
 
 ### Not in scope (currently)
