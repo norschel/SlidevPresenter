@@ -134,17 +134,20 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Spacing="10" Margin="12">
                         <TextBlock Text="Presentation Shortcuts" FontWeight="SemiBold"/>
-                        <TextBlock Text="Enter an Avalonia KeyGesture string (e.g. F5, Shift+F5, Ctrl+F5). Leave blank to use the OS default." Opacity="0.7" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding ShortcutHelpText}" Opacity="0.7" TextWrapping="Wrap"/>
 
-                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Start From Beginning" VerticalAlignment="Center"/>
-                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding StartFromBeginningShortcut}" PlaceholderText="OS default (e.g. F5)"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding StartFromBeginningShortcut}" PlaceholderText="{Binding StartFromBeginningShortcutPlaceholder}"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding StartFromBeginningDefaultShortcut, StringFormat='Default: {0}'}" Opacity="0.7" VerticalAlignment="Center"/>
 
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="Start From Current Slide" VerticalAlignment="Center"/>
-                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding StartFromCurrentSlideShortcut}" PlaceholderText="OS default (e.g. Shift+F5)"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding StartFromCurrentSlideShortcut}" PlaceholderText="{Binding StartFromCurrentSlideShortcutPlaceholder}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding StartFromCurrentSlideDefaultShortcut, StringFormat='Default: {0}'}" Opacity="0.7" VerticalAlignment="Center"/>
 
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="Start Presenter View" VerticalAlignment="Center"/>
-                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding StartPresenterViewShortcut}" PlaceholderText="OS default (e.g. Alt+F5)"/>
+                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding StartPresenterViewShortcut}" PlaceholderText="{Binding StartPresenterViewShortcutPlaceholder}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding StartPresenterViewDefaultShortcut, StringFormat='Default: {0}'}" Opacity="0.7" VerticalAlignment="Center"/>
                         </Grid>
 
                         <TextBlock Text="{Binding ShortcutConflictError}"

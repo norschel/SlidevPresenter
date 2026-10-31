@@ -13,6 +13,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly ISettingsService _settingsService;
     private readonly IThemeService _themeService;
+    private readonly IPlatformInfo _platformInfo;
     private readonly IGitRepositoryService _gitRepositoryService;
     private readonly ICodeEditorService _codeEditorService;
 
@@ -108,14 +109,33 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public string? ShortcutConflictError => ValidateShortcuts();
 
+    public string StartFromBeginningDefaultShortcut => DefaultShortcut(PresentationShortcutAction.StartFromBeginning);
+    public string StartFromCurrentSlideDefaultShortcut => DefaultShortcut(PresentationShortcutAction.StartFromCurrentSlide);
+    public string StartPresenterViewDefaultShortcut => DefaultShortcut(PresentationShortcutAction.StartPresenterView);
+
+    public string StartFromBeginningShortcutPlaceholder => $"{PlatformName} default ({StartFromBeginningDefaultShortcut})";
+    public string StartFromCurrentSlideShortcutPlaceholder => $"{PlatformName} default ({StartFromCurrentSlideDefaultShortcut})";
+    public string StartPresenterViewShortcutPlaceholder => $"{PlatformName} default ({StartPresenterViewDefaultShortcut})";
+
+    // Avalonia's KeyGesture parser accepts Cmd/Meta/⌘ but not "Option", so macOS hints use Alt.
+    public string ShortcutHelpText => _platformInfo.IsMacOS
+        ? "Enter a key gesture such as Cmd+Shift+Enter, Cmd+Enter or Alt+Enter (Alt = Option). Leave blank to use the macOS default shown on the right."
+        : "Enter a key gesture such as F5, Shift+F5 or Ctrl+F5. Leave blank to use the Windows default shown on the right.";
+
+    private string PlatformName => _platformInfo.IsMacOS ? "macOS" : "Windows";
+
+    private string DefaultShortcut(PresentationShortcutAction action)
+        => ShortcutService.GetDefaultDisplayText(_platformInfo, action);
+
     public SettingsViewModel(ISettingsService settingsService)
         : this(settingsService, new ThemeService())
     {
     }
 
-    public SettingsViewModel(ISettingsService settingsService, IThemeService themeService, IGitRepositoryService? gitRepositoryService = null, ICodeEditorService? codeEditorService = null)
+    public SettingsViewModel(ISettingsService settingsService, IThemeService themeService, IGitRepositoryService? gitRepositoryService = null, ICodeEditorService? codeEditorService = null, IPlatformInfo? platformInfo = null)
     {
         _settingsService = settingsService;
+        _platformInfo = platformInfo ?? new RuntimePlatformInfo();
         _themeService = themeService;
         _gitRepositoryService = gitRepositoryService ?? new GitRepositoryService();
         _codeEditorService = codeEditorService ?? new CodeEditorService();

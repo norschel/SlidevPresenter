@@ -19,6 +19,32 @@ internal sealed class FakeThemeService : IThemeService
 public sealed class SettingsViewModelTests
 {
     [Fact]
+    public void ShortcutLabels_OnMacOS_ShowMacDefaults()
+    {
+        var vm = new SettingsViewModel(new FakeSettingsService(), new FakeThemeService(), platformInfo: new SlideDevPresenter.Tests.Services.FakePlatformInfo(true));
+
+        Assert.Equal("⌘+Shift+Return", vm.StartFromBeginningDefaultShortcut);
+        Assert.Equal("⌘+Return", vm.StartFromCurrentSlideDefaultShortcut);
+        Assert.Equal("Option+Return", vm.StartPresenterViewDefaultShortcut);
+        Assert.Equal("macOS default (⌘+Shift+Return)", vm.StartFromBeginningShortcutPlaceholder);
+        Assert.Contains("Cmd+Shift+Enter", vm.ShortcutHelpText);
+        Assert.DoesNotContain("F5", vm.ShortcutHelpText);
+    }
+
+    [Fact]
+    public void ShortcutLabels_OnWindows_ShowWindowsDefaults()
+    {
+        var vm = new SettingsViewModel(new FakeSettingsService(), new FakeThemeService(), platformInfo: new SlideDevPresenter.Tests.Services.FakePlatformInfo(false));
+
+        Assert.Equal("F5", vm.StartFromBeginningDefaultShortcut);
+        Assert.Equal("Shift+F5", vm.StartFromCurrentSlideDefaultShortcut);
+        Assert.Equal("Alt+F5", vm.StartPresenterViewDefaultShortcut);
+        Assert.Equal("Windows default (Alt+F5)", vm.StartPresenterViewShortcutPlaceholder);
+        Assert.Contains("Shift+F5", vm.ShortcutHelpText);
+        Assert.DoesNotContain("Cmd", vm.ShortcutHelpText);
+    }
+
+    [Fact]
     public async Task SaveLocalSource_WithFilePath_RejectsBeforePersisting()
     {
         var filePath = Path.GetTempFileName();

@@ -104,8 +104,11 @@ public sealed class ShortcutService : IShortcutService
     }
 
     private string GetDefaultDisplayText(PresentationShortcutAction action)
+        => GetDefaultDisplayText(_platformInfo, action);
+
+    public static string GetDefaultDisplayText(IPlatformInfo platformInfo, PresentationShortcutAction action)
     {
-        if (_platformInfo.IsMacOS)
+        if (platformInfo.IsMacOS)
         {
             return action switch
             {
