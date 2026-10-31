@@ -27,6 +27,24 @@ public static class WebViewKeyboardBridge
         "},true);" +
         "})();";
 
+    public const string DiagnosticsScript = """
+        (function(){
+            if(window.__sdpDiagnosticsBridge)return;
+            window.__sdpDiagnosticsBridge=true;
+            function notify(message){
+                if(typeof invokeCSharpAction==='function')invokeCSharpAction(message);
+                else if(window.external&&window.external.invokeCSharpAction)window.external.invokeCSharpAction(message);
+            }
+            window.addEventListener('unhandledrejection',function(event){
+                const error=event.reason;
+                const name=String(error&&error.name||'');
+                if(name!=='NotAllowedError'&&name!=='AbortError')return;
+                const message=String(error&&error.message||error||'').slice(0,240);
+                notify(JSON.stringify({type:'sdp:diagnostic',name:name,message:message}));
+            });
+        })();
+        """;
+
     public const string Script = """
         (function(){
             if(window.__sdpPresentationKeys)return;
@@ -134,4 +152,46 @@ public static class WebViewKeyboardBridge
         RestoreMessage => false,
         _ => null
     };
+
+    /// <summary>Converts known permission and fetch rejections into user-facing recovery guidance.</summary>
+    public static string? GetActionableDiagnostic(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("type", out var type)
+                || type.ValueKind != JsonValueKind.String
+                || type.GetString() != "sdp:diagnostic"
+                || !root.TryGetProperty("name", out var nameElement)
+                || nameElement.ValueKind != JsonValueKind.String)
+                return null;
+
+            var name = nameElement.GetString();
+            var detail = root.TryGetProperty("message", out var messageElement)
+                && messageElement.ValueKind == JsonValueKind.String
+                ? messageElement.GetString()
+                : null;
+            if (!string.IsNullOrWhiteSpace(detail) && detail.Length > 160)
+                detail = detail[..160];
+
+            return name switch
+            {
+                "NotAllowedError" => $"Slidev could not obtain a browser permission{FormatDetail(detail)}. Check the browser or operating-system permission settings and keep the presenter view visible; SlideDevPresenter does not override the permission.",
+                "AbortError" => $"A Slidev presenter fetch was canceled{FormatDetail(detail)}. This can happen during navigation; if the presenter stops updating, refresh or reload the presenter view, or restart the presentation with Retry.",
+                _ => null
+            };
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string FormatDetail(string? detail) =>
+        string.IsNullOrWhiteSpace(detail) ? string.Empty : $" ({detail})";
 }

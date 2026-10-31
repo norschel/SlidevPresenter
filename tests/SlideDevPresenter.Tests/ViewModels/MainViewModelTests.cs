@@ -1157,6 +1157,38 @@ public class MainViewModelTests
 
         Assert.Single(vm.BrowserTabs);
         Assert.Equal(secondTab, vm.BrowserTabs[0]);
+        Assert.Same(secondTab, vm.SelectedBrowserTab);
+    }
+
+    [Fact]
+    public void CloseBrowserTab_WhenSelectedTabCloses_SelectsRemainingTab()
+    {
+        var vm = CreateViewModel();
+        vm.OpenInEmbeddedBrowser(new Uri("https://example.test/first"));
+        vm.OpenInEmbeddedBrowser(new Uri("https://example.test/second"));
+        var remainingTab = vm.BrowserTabs[0];
+        var selectedTab = vm.SelectedBrowserTab!;
+
+        vm.CloseBrowserTab(selectedTab);
+
+        Assert.Single(vm.BrowserTabs);
+        Assert.Same(remainingTab, vm.SelectedBrowserTab);
+        Assert.Equal(remainingTab.Url, vm.BrowserWorkspaceUri);
+        Assert.True(vm.IsBrowserSurfaceVisible);
+    }
+
+    [Fact]
+    public void SelectBrowserTab_ChangesWorkspaceUriToSelectedPage()
+    {
+        var vm = CreateViewModel();
+        vm.OpenInEmbeddedBrowser(new Uri("https://github.com"));
+        vm.OpenInEmbeddedBrowser(new Uri("https://docs.microsoft.com"));
+        var firstTab = vm.BrowserTabs[0];
+
+        vm.SelectBrowserTab(firstTab);
+
+        Assert.Same(firstTab, vm.SelectedBrowserTab);
+        Assert.Equal(firstTab.Url, vm.BrowserWorkspaceUri);
     }
 
     [Fact]
@@ -1171,6 +1203,41 @@ public class MainViewModelTests
         Assert.Empty(vm.BrowserTabs);
         Assert.Null(vm.SelectedBrowserTab);
         Assert.False(vm.HasBrowserTabs);
+        Assert.False(vm.IsBrowserSurfaceVisible);
+        Assert.Equal(new Uri("about:blank"), vm.BrowserWorkspaceUri);
+    }
+
+    [Fact]
+    public async Task RestoreChrome_WhenRibbonAndStatusAreHidden_MakesSettingsReachableAgain()
+    {
+        var settings = new FakeSettingsService();
+        settings.Settings.Appearance.ShowRibbon = false;
+        settings.Settings.Appearance.ShowStatusBar = false;
+        var vm = CreateViewModel(settings);
+        vm.UseParticipantSurface();
+
+        Assert.True(vm.CanRestoreChrome);
+        await vm.RestoreChromeCommand.ExecuteAsync(null);
+
+        Assert.True(vm.ShowRibbon);
+        Assert.True(vm.ShowStatusBar);
+        Assert.False(vm.CanRestoreChrome);
+        Assert.True(vm.IsParticipantSurfaceSelected);
+        Assert.Equal(1, settings.SaveCount);
+    }
+
+    [Fact]
+    public void RunningPresenterView_HidesLibrarySidebarAndExpandsEmbeddedSurface()
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+        vm.UsePresenterSurface();
+
+        Assert.True(vm.IsPresenterSurfaceSelected);
+        Assert.False(vm.IsLibrarySidebarVisible);
+        Assert.Equal(2, vm.EmbeddedSurfaceColumnSpan);
     }
 
     [Fact]

@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Interactivity;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
@@ -42,6 +44,7 @@ public partial class MainWindow : Window
         ConfigureBrowserWebView();
         ConfigureShortcutBindings();
         ConfigureShortcutTooltips();
+        ConfigureNativeApplicationMenu();
         AttachEscapeHandler();
     }
 
@@ -67,10 +70,14 @@ public partial class MainWindow : Window
         ConfigureBrowserWebView();
         ConfigureShortcutBindings();
         ConfigureShortcutTooltips();
+        ConfigureNativeApplicationMenu();
         AttachEscapeHandler();
     }
 
     private async void Settings_Click(object? sender, RoutedEventArgs e)
+        => await OpenSettingsAsync();
+
+    private async Task OpenSettingsAsync()
     {
         if (_viewModel is null)
             return;
@@ -84,8 +91,47 @@ public partial class MainWindow : Window
     }
 
     private async void About_Click(object? sender, RoutedEventArgs e)
+        => await OpenAboutAsync();
+
+    private async Task OpenAboutAsync()
     {
         await new AboutWindow(_viewModel?.AppVersion ?? "unknown").ShowDialog(this);
+    }
+
+    private void ConfigureNativeApplicationMenu()
+    {
+        if (!OperatingSystem.IsMacOS())
+            return;
+
+        var menu = ApplicationMenuFactory.Create(
+            isMacOS: true,
+            openSettings: () => _ = OpenSettingsAsync(),
+            openAbout: () => _ = OpenAboutAsync(),
+            restoreChrome: () =>
+            {
+                if (_viewModel?.RestoreChromeCommand.CanExecute(null) == true)
+                    _ = _viewModel.RestoreChromeCommand.ExecuteAsync(null);
+            },
+            quit: QuitApplication);
+        NativeMenu.SetMenu(this, menu);
+    }
+
+    private static void QuitApplication()
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            desktop.Shutdown();
+    }
+
+    private void BrowserTab_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: BrowserTabViewModel tab })
+            _viewModel?.SelectBrowserTab(tab);
+    }
+
+    private void CloseBrowserTab_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: BrowserTabViewModel tab })
+            _viewModel?.CloseBrowserTab(tab);
     }
 
     private async void Branch_SelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -544,8 +590,8 @@ public partial class MainWindow : Window
                 _isPresentationBlanked = false;
 
             await webView.InvokeScript(ReferenceEquals(webView, BrowserWebView)
-                ? WebViewKeyboardBridge.EscapeScript
-                : WebViewKeyboardBridge.Script);
+                ? WebViewKeyboardBridge.EscapeScript + WebViewKeyboardBridge.DiagnosticsScript
+                : WebViewKeyboardBridge.Script + WebViewKeyboardBridge.DiagnosticsScript);
         }
         catch (Exception exception)
         {
@@ -555,6 +601,12 @@ public partial class MainWindow : Window
 
     private void OnWebViewWebMessageReceived(object? sender, WebMessageReceivedEventArgs e)
     {
+        if (WebViewKeyboardBridge.GetActionableDiagnostic(e.Body) is { } diagnostic)
+        {
+            _viewModel?.ReportWebViewDiagnostic(diagnostic);
+            System.Diagnostics.Trace.TraceWarning(diagnostic);
+        }
+
         if (ReferenceEquals(sender, EmbeddedWebView) && WebViewKeyboardBridge.GetBlankState(e.Body) is bool isBlanked)
         {
             _isPresentationBlanked = isBlanked;
@@ -570,18 +622,6 @@ public partial class MainWindow : Window
     private bool TryHandlePresentationKey(KeyEventArgs e) =>
         e.Handled || (!_embeddedWebViewsDisabledForSession && _viewModel?.CanShowEmbeddedSurface == true
             && WebViewKeyboardBridge.TryHandleKey(EmbeddedWebView, e, _isPresentationBlanked));
-
-    private async void PreviousSlide_Click(object? sender, RoutedEventArgs e) =>
-        await NavigateSlideAsync(Key.P);
-
-    private async void NextSlide_Click(object? sender, RoutedEventArgs e) =>
-        await NavigateSlideAsync(Key.N);
-
-    private async Task NavigateSlideAsync(Key key)
-    {
-        if (!_embeddedWebViewsDisabledForSession && _viewModel?.CanShowEmbeddedSurface == true)
-            await WebViewKeyboardBridge.DispatchKeyAsync(EmbeddedWebView, key, KeyModifiers.None, useFocusedElement: false);
-    }
 
     private void TryHandleEscape(KeyEventArgs e)
     {
