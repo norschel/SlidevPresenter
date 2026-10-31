@@ -1,7 +1,9 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using SlideDevPresenter.App.Services;
 using SlideDevPresenter.App.ViewModels;
@@ -18,6 +20,15 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+
+        // macOS exports the application menu before OnFrameworkInitializationCompleted, so its commands resolve the main window lazily.
+        if (OperatingSystem.IsMacOS())
+        {
+            NativeMenu.SetMenu(this, ApplicationMenuFactory.CreateApplicationMenu(
+                isMacOS: true,
+                about: new RelayCommand(() => _ = _mainWindow?.OpenAboutAsync()),
+                settings: new RelayCommand(() => _ = _mainWindow?.OpenSettingsAsync())));
+        }
     }
 
     public override void OnFrameworkInitializationCompleted()

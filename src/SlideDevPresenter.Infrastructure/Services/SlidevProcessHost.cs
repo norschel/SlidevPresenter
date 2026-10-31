@@ -133,17 +133,15 @@ public sealed class SlidevProcessHost : ISlidevProcessHost
 
         _logger.LogDebug("[slidev] {Line}", data);
 
-        // Detect the ready line; Slidev prints: "  ➜  Local:   http://localhost:3030/"
-        if (State == HostState.Starting && data.Contains("Local:", StringComparison.OrdinalIgnoreCase))
+        if (State == HostState.Starting && SlidevOutputParser.TryParseReadyUrl(data, out var url))
         {
-            var url = ExtractUrl(data);
-            if (url is not null)
-            {
-                ParticipantUrl = url;
-                PresenterUrl = url.TrimEnd('/') + "/presenter/";
-                _logger.LogInformation("Slidev ready at {Url}.", url);
-                TransitionState(HostState.Running);
-            }
+            var participantUrl = url.AbsoluteUri;
+            // Slidev may pick another port when the requested one is taken.
+            Port = url.Port;
+            ParticipantUrl = participantUrl;
+            PresenterUrl = participantUrl.TrimEnd('/') + "/presenter/";
+            _logger.LogInformation("Slidev ready at {Url}.", participantUrl);
+            TransitionState(HostState.Running);
         }
     }
 
@@ -169,19 +167,6 @@ public sealed class SlidevProcessHost : ISlidevProcessHost
         StateChanged?.Invoke(this, new HostStateChangedEventArgs(
             newState,
             newState == HostState.Error ? ErrorMessage : null));
-    }
-
-    private static string? ExtractUrl(string line)
-    {
-        var idx = line.IndexOf("http://", StringComparison.OrdinalIgnoreCase);
-        if (idx < 0)
-            idx = line.IndexOf("https://", StringComparison.OrdinalIgnoreCase);
-        if (idx < 0)
-            return null;
-
-        var url = line[idx..].Trim();
-        var end = url.IndexOfAny([' ', '\t']);
-        return end >= 0 ? url[..end] : url;
     }
 
     private static IRunningProcess DefaultProcessFactory(ProcessStartInfo psi)

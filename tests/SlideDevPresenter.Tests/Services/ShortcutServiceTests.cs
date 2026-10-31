@@ -37,6 +37,8 @@ public sealed class ShortcutServiceTests
         Assert.Equal(Key.Enter, presenterView.Key);
         Assert.Equal(KeyModifiers.Alt, presenterView.KeyModifiers);
         Assert.Equal("⌘+Shift+Return", service.GetDisplayText(PresentationShortcutAction.StartFromBeginning));
+        Assert.Equal("⌘+Return", service.GetDisplayText(PresentationShortcutAction.StartFromCurrentSlide));
+        Assert.Equal("Option+Return", service.GetDisplayText(PresentationShortcutAction.StartPresenterView));
     }
 
     [Fact]
@@ -55,6 +57,8 @@ public sealed class ShortcutServiceTests
         Assert.Equal(Key.F5, presenterView.Key);
         Assert.Equal(KeyModifiers.Alt, presenterView.KeyModifiers);
         Assert.Equal("F5", service.GetDisplayText(PresentationShortcutAction.StartFromBeginning));
+        Assert.Equal("Shift+F5", service.GetDisplayText(PresentationShortcutAction.StartFromCurrentSlide));
+        Assert.Equal("Alt+F5", service.GetDisplayText(PresentationShortcutAction.StartPresenterView));
     }
 
     [Fact]
