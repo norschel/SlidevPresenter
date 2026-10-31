@@ -299,11 +299,11 @@
                                             <DockPanel LastChildFill="True">
                                                 <Button DockPanel.Dock="Right" Content="×" Padding="6,2" MinWidth="24"
                                                         ToolTip.Tip="Close tab" Click="CloseBrowserTab_Click"/>
-                                                <ToggleButton IsChecked="{Binding IsSelected, Mode=OneWay}" Click="BrowserTab_Click"
-                                                              Padding="8,3" HorizontalContentAlignment="Left">
+                                                <RadioButton GroupName="BrowserTabs" IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                             Click="BrowserTab_Click" Padding="8,3" HorizontalContentAlignment="Left">
                                                     <TextBlock Text="{Binding Title}" VerticalAlignment="Center" FontSize="12"
                                                                MaxWidth="160" TextTrimming="CharacterEllipsis"/>
-                                                </ToggleButton>
+                                                </RadioButton>
                                             </DockPanel>
                                         </Border>
                                     </DataTemplate>

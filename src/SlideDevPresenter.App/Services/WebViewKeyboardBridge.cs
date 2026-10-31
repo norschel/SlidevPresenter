@@ -163,33 +163,44 @@ public static class WebViewKeyboardBridge
         {
             using var document = JsonDocument.Parse(body);
             var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object
-                || !root.TryGetProperty("type", out var type)
-                || type.ValueKind != JsonValueKind.String
-                || type.GetString() != "sdp:diagnostic"
-                || !root.TryGetProperty("name", out var nameElement)
-                || nameElement.ValueKind != JsonValueKind.String)
-                return null;
-
-            var name = nameElement.GetString();
-            var detail = root.TryGetProperty("message", out var messageElement)
-                && messageElement.ValueKind == JsonValueKind.String
-                ? messageElement.GetString()
-                : null;
-            if (!string.IsNullOrWhiteSpace(detail) && detail.Length > 160)
-                detail = detail[..160];
-
-            return name switch
+            if (root.ValueKind == JsonValueKind.String)
             {
-                "NotAllowedError" => $"Slidev could not obtain a browser permission{FormatDetail(detail)}. Check the browser or operating-system permission settings and keep the presenter view visible; SlideDevPresenter does not override the permission.",
-                "AbortError" => $"A Slidev presenter fetch was canceled{FormatDetail(detail)}. This can happen during navigation; if the presenter stops updating, refresh or reload the presenter view, or restart the presentation with Retry.",
-                _ => null
-            };
+                using var wrappedDocument = JsonDocument.Parse(root.GetString() ?? string.Empty);
+                return FormatActionableDiagnostic(wrappedDocument.RootElement);
+            }
+
+            return FormatActionableDiagnostic(root);
         }
         catch (JsonException)
         {
             return null;
         }
+    }
+
+    private static string? FormatActionableDiagnostic(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty("type", out var type)
+            || type.ValueKind != JsonValueKind.String
+            || type.GetString() != "sdp:diagnostic"
+            || !root.TryGetProperty("name", out var nameElement)
+            || nameElement.ValueKind != JsonValueKind.String)
+            return null;
+
+        var name = nameElement.GetString();
+        var detail = root.TryGetProperty("message", out var messageElement)
+            && messageElement.ValueKind == JsonValueKind.String
+            ? messageElement.GetString()
+            : null;
+        if (!string.IsNullOrWhiteSpace(detail) && detail.Length > 160)
+            detail = detail[..160];
+
+        return name switch
+        {
+            "NotAllowedError" => $"Slidev could not obtain a browser permission{FormatDetail(detail)}. Check the browser or operating-system permission settings and keep the presenter view visible; SlideDevPresenter does not override the permission.",
+            "AbortError" => $"A Slidev presenter fetch was canceled{FormatDetail(detail)}. This can happen during navigation; if the presenter stops updating, refresh or reload the presenter view, or restart the presentation with Retry.",
+            _ => null
+        };
     }
 
     private static string FormatDetail(string? detail) =>

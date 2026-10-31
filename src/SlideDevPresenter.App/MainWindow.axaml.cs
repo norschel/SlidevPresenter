@@ -134,8 +134,16 @@ public partial class MainWindow : Window
         if (!OperatingSystem.IsMacOS())
             return;
 
-        _applicationMenu = ApplicationMenuFactory.Create(isMacOS: true, CreateApplicationMenuCommands());
-        NativeMenu.SetMenu(this, _applicationMenu);
+        var application = Application.Current;
+        var applicationMenu = application is null ? null : NativeMenu.GetMenu(application);
+        if (applicationMenu is null)
+            return;
+
+        var windowMenus = ApplicationMenuFactory.Create(isMacOS: true, CreateApplicationMenuCommands());
+        foreach (var item in windowMenus.Items)
+            applicationMenu.Items.Add(item);
+
+        _applicationMenu = applicationMenu;
     }
 
     private ApplicationMenuCommands CreateApplicationMenuCommands()
@@ -702,6 +710,7 @@ public partial class MainWindow : Window
     {
         if ((e.Handled && e.Key != Key.Space) || _presentationWindowService?.IsParticipantWindowOpen != true
             || e.Source is TextBox or NativeWebView
+            || e.Source is Control { DataContext: BrowserTabViewModel }
             || (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) != 0)
             return false;
 

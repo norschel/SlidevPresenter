@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SlideDevPresenter.App.Services;
 
 namespace SlideDevPresenter.Tests.Services;
@@ -26,5 +27,16 @@ public sealed class WebViewDiagnosticTests
         Assert.Null(WebViewKeyboardBridge.GetActionableDiagnostic("""{"type":1,"name":[]}"""));
         Assert.Null(WebViewKeyboardBridge.GetActionableDiagnostic("""[{"type":"sdp:diagnostic"}]"""));
         Assert.Null(WebViewKeyboardBridge.GetActionableDiagnostic("not json"));
+    }
+
+    [Fact]
+    public void GetActionableDiagnostic_UnwrapsJsonStringPayload()
+    {
+        var body = JsonSerializer.Serialize("""{"type":"sdp:diagnostic","name":"AbortError","message":"The fetch was aborted"}""");
+
+        var diagnostic = WebViewKeyboardBridge.GetActionableDiagnostic(body);
+
+        Assert.NotNull(diagnostic);
+        Assert.Contains("fetch was canceled", diagnostic);
     }
 }
