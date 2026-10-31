@@ -1072,6 +1072,47 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void CanStartSelectedPresentation_WhenNothingSelected_ShowsSelectHint()
+    {
+        var vm = CreateViewModel();
+
+        Assert.False(vm.CanStartSelectedPresentation);
+        Assert.True(vm.IsSelectPresentationHintVisible);
+    }
+
+    [Fact]
+    public void CanStartSelectedPresentation_WhenProjectSelectedAndIdle_IsTrueAndRaisesChange()
+    {
+        var vm = CreateViewModel();
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+
+        Assert.True(vm.CanStartSelectedPresentation);
+        Assert.False(vm.IsSelectPresentationHintVisible);
+        Assert.Contains(nameof(MainViewModel.CanStartSelectedPresentation), changed);
+        Assert.Contains(nameof(MainViewModel.IsSelectPresentationHintVisible), changed);
+    }
+
+    [Fact]
+    public void CanStartSelectedPresentation_WhenRunning_IsFalseAndStopIsAvailable()
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+
+        Assert.False(vm.CanStartSelectedPresentation);
+        Assert.True(vm.IsPresentationActive);
+        Assert.Contains(nameof(MainViewModel.CanStartSelectedPresentation), changed);
+        Assert.Contains(nameof(MainViewModel.IsPresentationActive), changed);
+    }
+
+    [Fact]
     public void SelectPresentationRibbon_SetsIsPresentationRibbonSelected()
     {
         var vm = CreateViewModel();

@@ -519,9 +519,16 @@ public partial class MainWindow : Window
 
     private void ConfigureShortcutTooltips()
     {
-        ToolTip.SetTip(StartFromBeginningButton, $"Start presentation ({_shortcutService.GetDisplayText(PresentationShortcutAction.StartFromBeginning)})");
-        ToolTip.SetTip(StartFromCurrentButton, $"Start from selected slide ({_shortcutService.GetDisplayText(PresentationShortcutAction.StartFromCurrentSlide)})");
-        ToolTip.SetTip(StartPresenterViewButton, $"Launch presenter view ({_shortcutService.GetDisplayText(PresentationShortcutAction.StartPresenterView)})");
+        var fromBeginning = $"Start presentation ({_shortcutService.GetDisplayText(PresentationShortcutAction.StartFromBeginning)})";
+        var fromCurrent = $"Start from selected slide ({_shortcutService.GetDisplayText(PresentationShortcutAction.StartFromCurrentSlide)})";
+        var presenterView = $"Launch presenter view ({_shortcutService.GetDisplayText(PresentationShortcutAction.StartPresenterView)})";
+
+        foreach (var button in new Control[] { StartFromBeginningButton, HomeStartFromBeginningButton, IdleStartFromBeginningButton })
+            ToolTip.SetTip(button, fromBeginning);
+        foreach (var button in new Control[] { StartFromCurrentButton, HomeStartFromCurrentButton, IdleStartFromCurrentButton })
+            ToolTip.SetTip(button, fromCurrent);
+        foreach (var button in new Control[] { StartPresenterViewButton, HomeStartPresenterViewButton, IdleStartPresenterViewButton })
+            ToolTip.SetTip(button, presenterView);
     }
 
     /// <summary>Rebuilds keyboard shortcut bindings and tooltips from the current settings.</summary>

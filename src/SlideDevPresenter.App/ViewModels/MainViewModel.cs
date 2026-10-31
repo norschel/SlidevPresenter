@@ -62,6 +62,8 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanExportPdf))]
     [NotifyPropertyChangedFor(nameof(CanRemoveSelectedProject))]
     [NotifyPropertyChangedFor(nameof(ShowEditTab))]
+    [NotifyPropertyChangedFor(nameof(CanStartSelectedPresentation))]
+    [NotifyPropertyChangedFor(nameof(IsSelectPresentationHintVisible))]
     [NotifyCanExecuteChangedFor(nameof(EditSelectedProjectCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
@@ -87,6 +89,9 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsRunning))]
     [NotifyPropertyChangedFor(nameof(IsLibrarySidebarVisible))]
     [NotifyPropertyChangedFor(nameof(IsError))]
+    [NotifyPropertyChangedFor(nameof(IsPresentationActive))]
+    [NotifyPropertyChangedFor(nameof(CanStartSelectedPresentation))]
+    [NotifyPropertyChangedFor(nameof(IsSelectPresentationHintVisible))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(StopCommand))]
     [NotifyCanExecuteChangedFor(nameof(SwapDisplaysCommand))]
@@ -121,6 +126,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanChangeSelectedBranch))]
+    [NotifyPropertyChangedFor(nameof(CanStartSelectedPresentation))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
     [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
@@ -192,6 +198,10 @@ public sealed partial class MainViewModel : ObservableObject
     public bool IsStarting => HostState == HostState.Starting;
     public bool IsRunning => HostState == HostState.Running;
     public bool IsError => HostState == HostState.Error;
+    public bool IsPresentationActive => IsStarting || IsRunning;
+    /// <summary>True when a library entry is selected and can be started right away, so start actions are shown without visiting the Presentation tab.</summary>
+    public bool CanStartSelectedPresentation => !IsRefreshing && SelectedProject is not null && IsIdle;
+    public bool IsSelectPresentationHintVisible => SelectedProject is null && IsIdle;
 
     public bool IsHomeRibbonSelected => SelectedRibbonTab == "Home";
     public bool IsLibraryRibbonSelected => SelectedRibbonTab == "Library";

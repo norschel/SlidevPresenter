@@ -38,7 +38,16 @@
                 <Border Grid.Row="1" Margin="0,12,0,0" Background="{DynamicResource AppChromePanelBrush}" CornerRadius="8" Padding="12">
                     <Panel>
                         <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsHomeRibbonSelected}">
-                            <TextBlock Text="Select Presentation to start or manage a Slidev deck." VerticalAlignment="Center"/>
+                            <TextBlock Text="Select a presentation in the Library to start it." VerticalAlignment="Center" IsVisible="{Binding IsSelectPresentationHintVisible}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanStartSelectedPresentation}">
+                                <Button x:Name="HomeStartFromBeginningButton" Classes="accent" Content="▶ From Beginning" Command="{Binding StartFromBeginningCommand}" ToolTip.Tip="Start presentation"/>
+                                <Button x:Name="HomeStartFromCurrentButton" Content="From Current Slide" Command="{Binding StartFromCurrentSlideCommand}" ToolTip.Tip="Start from selected slide"/>
+                                <Button x:Name="HomeStartPresenterViewButton" Content="Presenter View" Command="{Binding StartPresenterViewCommand}" ToolTip.Tip="Start presenter view"/>
+                                <Button Content="⏎ Resume" Command="{Binding ResumeCommand}" IsVisible="{Binding HasLastKnownPosition}" ToolTip.Tip="Resume presentation from last saved position"/>
+                                <TextBlock Text="{Binding SelectedProject.Name}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                            </StackPanel>
+                            <Button Content="■ Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsPresentationActive}" ToolTip.Tip="Stop presentation"/>
+                            <Button Content="↻ Retry" Command="{Binding RetryCommand}" IsVisible="{Binding IsError}" ToolTip.Tip="Retry presentation"/>
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsLibraryRibbonSelected}">
@@ -136,6 +145,7 @@
                         <TextBlock Text="{Binding DeckTitle}" FontWeight="SemiBold"/>
                         <TextBlock Text="{Binding SlideCount, StringFormat='Slides loaded: {0}'}" Opacity="0.7"/>
                         <TextBlock Text="{Binding SelectedSlideSummary}" TextWrapping="Wrap" Opacity="0.8" FontSize="12"/>
+                        <Button Classes="accent" Content="▶ Start Presentation" Command="{Binding StartFromBeginningCommand}" IsVisible="{Binding CanStartSelectedPresentation}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" ToolTip.Tip="Start the selected presentation"/>
                     </StackPanel>
                 </Border>
 
@@ -147,10 +157,18 @@
             <Panel>
                 <!-- Normal presentation workspace (all states except Browser tab) -->
                 <Panel IsVisible="{Binding IsNormalWorkspaceVisible}">
-                <StackPanel IsVisible="{Binding IsIdle}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16" MaxWidth="520">
+                <StackPanel IsVisible="{Binding IsIdle}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16" MaxWidth="560">
                     <TextBlock Text="SlideDevPresenter" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Select a presentation, start Slidev, then switch between embedded presenter and participant workflows from the ribbon." Opacity="0.7" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
-                    <TextBlock Text="Open the Presentation tab to start or resume a deck." Opacity="0.7" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                    <TextBlock IsVisible="{Binding IsSelectPresentationHintVisible}" Text="Select a presentation in the Library on the left to get started." Opacity="0.7" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                    <StackPanel IsVisible="{Binding CanStartSelectedPresentation}" Spacing="12" HorizontalAlignment="Center">
+                        <TextBlock Text="{Binding SelectedProject.Name}" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                        <Button x:Name="IdleStartFromBeginningButton" Classes="accent" Content="▶ Start from Beginning" Command="{Binding StartFromBeginningCommand}" HorizontalAlignment="Center" Padding="24,10" FontSize="16" ToolTip.Tip="Start presentation"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                            <Button x:Name="IdleStartFromCurrentButton" Content="From Current Slide" Command="{Binding StartFromCurrentSlideCommand}" ToolTip.Tip="Start from selected slide"/>
+                            <Button x:Name="IdleStartPresenterViewButton" Content="Presenter View" Command="{Binding StartPresenterViewCommand}" ToolTip.Tip="Start presenter view"/>
+                            <Button Content="⏎ Resume" Command="{Binding ResumeCommand}" IsVisible="{Binding HasLastKnownPosition}" ToolTip.Tip="Resume presentation from last saved position"/>
+                        </StackPanel>
+                    </StackPanel>
                 </StackPanel>
 
                 <StackPanel IsVisible="{Binding IsStarting}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
