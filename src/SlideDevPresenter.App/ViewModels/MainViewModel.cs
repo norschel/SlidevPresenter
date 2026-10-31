@@ -62,6 +62,8 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanExportPdf))]
     [NotifyPropertyChangedFor(nameof(CanRemoveSelectedProject))]
     [NotifyPropertyChangedFor(nameof(ShowEditTab))]
+    [NotifyPropertyChangedFor(nameof(CanStartSelectedPresentation))]
+    [NotifyPropertyChangedFor(nameof(IsSelectPresentationHintVisible))]
     [NotifyCanExecuteChangedFor(nameof(EditSelectedProjectCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
@@ -85,7 +87,11 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsIdle))]
     [NotifyPropertyChangedFor(nameof(IsStarting))]
     [NotifyPropertyChangedFor(nameof(IsRunning))]
+    [NotifyPropertyChangedFor(nameof(IsLibrarySidebarVisible))]
     [NotifyPropertyChangedFor(nameof(IsError))]
+    [NotifyPropertyChangedFor(nameof(IsPresentationActive))]
+    [NotifyPropertyChangedFor(nameof(CanStartSelectedPresentation))]
+    [NotifyPropertyChangedFor(nameof(IsSelectPresentationHintVisible))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(StopCommand))]
     [NotifyCanExecuteChangedFor(nameof(SwapDisplaysCommand))]
@@ -116,7 +122,11 @@ public sealed partial class MainViewModel : ObservableObject
     private string? _errorMessage;
 
     [ObservableProperty]
+    private string? _webViewDiagnostic;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanChangeSelectedBranch))]
+    [NotifyPropertyChangedFor(nameof(CanStartSelectedPresentation))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
     [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
@@ -127,6 +137,10 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CurrentSurfaceUriOrBlank))]
     [NotifyPropertyChangedFor(nameof(CurrentSurfaceLabel))]
     [NotifyPropertyChangedFor(nameof(CanShowEmbeddedSurface))]
+    [NotifyPropertyChangedFor(nameof(IsPresenterSurfaceSelected))]
+    [NotifyPropertyChangedFor(nameof(IsParticipantSurfaceSelected))]
+    [NotifyPropertyChangedFor(nameof(EmbeddedSurfaceColumnSpan))]
+    [NotifyPropertyChangedFor(nameof(IsLibrarySidebarVisible))]
     private PresentationSurfaceMode _selectedSurfaceMode;
 
     [ObservableProperty]
@@ -172,12 +186,22 @@ public sealed partial class MainViewModel : ObservableObject
 
     public ObservableCollection<BrowserTabViewModel> BrowserTabs { get; } = [];
 
+    partial void OnSelectedBrowserTabChanged(BrowserTabViewModel? value)
+    {
+        foreach (var tab in BrowserTabs)
+            tab.IsSelected = ReferenceEquals(tab, value);
+    }
+
     public bool HasDetectedDisplays => DetectedDisplayCount > 0;
 
     public bool IsIdle => HostState == HostState.Idle;
     public bool IsStarting => HostState == HostState.Starting;
     public bool IsRunning => HostState == HostState.Running;
     public bool IsError => HostState == HostState.Error;
+    public bool IsPresentationActive => IsStarting || IsRunning;
+    /// <summary>True when a library entry is selected and can be started right away, so start actions are shown without visiting the Presentation tab.</summary>
+    public bool CanStartSelectedPresentation => !IsRefreshing && SelectedProject is not null && IsIdle;
+    public bool IsSelectPresentationHintVisible => SelectedProject is null && IsIdle;
 
     public bool IsHomeRibbonSelected => SelectedRibbonTab == "Home";
     public bool IsLibraryRibbonSelected => SelectedRibbonTab == "Library";
@@ -189,6 +213,10 @@ public sealed partial class MainViewModel : ObservableObject
         && _availableCodeEditors.Contains(_settingsService.Settings.Editing.Edition)
         && SelectedProject is { SourceType: not PresentationSourceType.HostedUrl };
     public bool IsNormalWorkspaceVisible => SelectedRibbonTab != "Browser";
+    public bool IsPresenterSurfaceSelected => SelectedSurfaceMode == PresentationSurfaceMode.Presenter;
+    public bool IsParticipantSurfaceSelected => SelectedSurfaceMode == PresentationSurfaceMode.Participant;
+    public bool IsLibrarySidebarVisible => !IsRunning || !IsPresenterSurfaceSelected;
+    public int EmbeddedSurfaceColumnSpan => IsPresenterSurfaceSelected ? 2 : 1;
     public bool HasBrowserTabs => BrowserTabs.Count > 0;
     /// <summary>
     /// True only when the Browser ribbon tab is selected AND at least one browser tab is open.
@@ -210,6 +238,7 @@ public sealed partial class MainViewModel : ObservableObject
     public bool CanShowBrowserFallback => IsRunning && _settingsService.Settings.WebView.AllowExternalBrowserFallback;
     public bool ShowRibbon => _settingsService.Settings.Appearance.ShowRibbon;
     public bool ShowStatusBar => _settingsService.Settings.Appearance.ShowStatusBar;
+    public bool CanRestoreChrome => !ShowRibbon || !ShowStatusBar;
     private static readonly string s_appVersion = GetAppVersion();
     public string AppVersion => s_appVersion;
     public bool HasSlides => Slides.Count > 0;
@@ -268,6 +297,7 @@ public sealed partial class MainViewModel : ObservableObject
         SelectedSurfaceMode = ParseSurfaceMode(_settingsService.Settings.Defaults.DefaultMode);
         OnPropertyChanged(nameof(ShowRibbon));
         OnPropertyChanged(nameof(ShowStatusBar));
+        OnPropertyChanged(nameof(CanRestoreChrome));
         OnPropertyChanged(nameof(CanShowEmbeddedSurface));
         OnPropertyChanged(nameof(CanShowBrowserFallback));
         OnPropertyChanged(nameof(EmbeddedSurfaceHint));
@@ -796,6 +826,13 @@ public sealed partial class MainViewModel : ObservableObject
     public void SelectBrowserRibbon() => SelectedRibbonTab = "Browser";
 
     [RelayCommand]
+    public void SelectBrowserTab(BrowserTabViewModel tab)
+    {
+        if (BrowserTabs.Contains(tab))
+            SelectedBrowserTab = tab;
+    }
+
+    [RelayCommand]
     public void CloseBrowserTab(BrowserTabViewModel tab)
     {
         BrowserTabs.Remove(tab);
@@ -805,6 +842,22 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsBrowserSurfaceVisible));
         OnPropertyChanged(nameof(BrowserWorkspaceUri));
     }
+
+    [RelayCommand]
+    public async Task RestoreChromeAsync()
+    {
+        _settingsService.Settings.Appearance.ShowRibbon = true;
+        _settingsService.Settings.Appearance.ShowStatusBar = true;
+        OnPropertyChanged(nameof(ShowRibbon));
+        OnPropertyChanged(nameof(ShowStatusBar));
+        OnPropertyChanged(nameof(CanRestoreChrome));
+        await _settingsService.SaveAsync();
+    }
+
+    [RelayCommand]
+    public void DismissWebViewDiagnostic() => WebViewDiagnostic = null;
+
+    public void ReportWebViewDiagnostic(string diagnostic) => WebViewDiagnostic = diagnostic;
 
     [RelayCommand]
     public void UsePresenterSurface() => SelectedSurfaceMode = PresentationSurfaceMode.Presenter;

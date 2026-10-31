@@ -9,7 +9,7 @@
         Title="Choose presentation display"
         WindowStartupLocation="CenterOwner">
     <StackPanel Margin="16" Spacing="12">
-        <TextBlock Text="Multiple displays detected. Which display should show the participant view?" TextWrapping="Wrap"/>
+        <TextBlock Text="Choose the display where the participant view should appear." TextWrapping="Wrap"/>
 
         <ListBox x:Name="DisplayList" MaxHeight="260">
             <ListBox.ItemTemplate>

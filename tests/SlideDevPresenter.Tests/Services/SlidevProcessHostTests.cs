@@ -192,6 +192,45 @@ public class SlidevProcessHostTests
     }
 
     [Fact]
+    public async Task OutputWithPublicSlideShowUrl_TransitionsToRunningWithUrls()
+    {
+        var (host, fake) = CreateHost();
+        await host.StartAsync(MakeProject(), 3030);
+
+        fake.SimulateOutput("\u001b[2m  public slide show \u001b[22m  > \u001b[36mhttp://localhost:\u001b[1m3030\u001b[22m/\u001b[39m");
+
+        Assert.Equal(HostState.Running, host.State);
+        Assert.Equal("http://localhost:3030/", host.ParticipantUrl);
+        Assert.Equal("http://localhost:3030/presenter/", host.PresenterUrl);
+    }
+
+    [Fact]
+    public async Task OutputWithDifferentPort_UsesDetectedPort()
+    {
+        var (host, fake) = CreateHost();
+        await host.StartAsync(MakeProject(), 3030);
+
+        fake.SimulateOutput("  public slide show   > http://localhost:64848/");
+
+        Assert.Equal(HostState.Running, host.State);
+        Assert.Equal(64848, host.Port);
+        Assert.Equal("http://localhost:64848/", host.ParticipantUrl);
+        Assert.Equal("http://localhost:64848/presenter/", host.PresenterUrl);
+    }
+
+    [Fact]
+    public async Task OutputWithPresenterModeUrl_DoesNotTransition()
+    {
+        var (host, fake) = CreateHost();
+        await host.StartAsync(MakeProject(), 3030);
+
+        fake.SimulateOutput("  presenter mode      > http://localhost:3030/presenter/");
+
+        Assert.Equal(HostState.Starting, host.State);
+        Assert.Null(host.ParticipantUrl);
+    }
+
+    [Fact]
     public async Task OutputWithoutLocalUrl_DoesNotTransition()
     {
         var (host, fake) = CreateHost();

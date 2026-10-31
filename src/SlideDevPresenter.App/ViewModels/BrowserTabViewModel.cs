@@ -10,6 +10,9 @@ public sealed partial class BrowserTabViewModel : ObservableObject
     [ObservableProperty]
     private Uri _url;
 
+    [ObservableProperty]
+    private bool _isSelected;
+
     public BrowserTabViewModel(Uri url)
     {
         _url = url;
