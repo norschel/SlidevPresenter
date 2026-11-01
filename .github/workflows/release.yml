@@ -167,6 +167,18 @@ jobs:
           }
           vpk @arguments
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Add package-manager installer asset
+        shell: pwsh
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          $extension = if ($IsWindows) { "*.exe" } else { "*.pkg" }
+          $installers = @(Get-ChildItem Releases -File -Filter $extension)
+          if ($installers.Count -ne 1) {
+            throw "Expected one $extension installer in Releases, found $($installers.Count)."
+          }
+          $name = if ($IsWindows) { "SlideDevPresenter-win-x64-Setup.exe" } else { "SlideDevPresenter-$env:RID.pkg" }
+          Copy-Item $installers[0].FullName (Join-Path Releases $name)
       - name: Remove temporary signing credentials
         if: always()
         shell: pwsh
@@ -199,6 +211,118 @@ jobs:
           pattern: desktop-*
           path: release-assets
           merge-multiple: true
+      - name: Create Homebrew and Chocolatey packages
+        if: needs.verify.outputs.prerelease == 'false'
+        env:
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import os
+          import zipfile
+          from pathlib import Path
+
+          assets = Path("release-assets")
+          version = os.environ["TAG"][1:]
+          tag = os.environ["TAG"]
+
+          def sha256(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          intel_pkg = assets / "SlideDevPresenter-osx-x64.pkg"
+          arm_pkg = assets / "SlideDevPresenter-osx-arm64.pkg"
+          windows_setup = assets / "SlideDevPresenter-win-x64-Setup.exe"
+          cask = f'''cask "slide-dev-presenter" do
+            version "{version}"
+
+            on_arm do
+              url "https://github.com/norschel/SlidevPresenter/releases/download/{tag}/SlideDevPresenter-osx-arm64.pkg"
+              sha256 "{sha256(arm_pkg)}"
+              pkg "SlideDevPresenter-osx-arm64.pkg"
+            end
+
+            on_intel do
+              url "https://github.com/norschel/SlidevPresenter/releases/download/{tag}/SlideDevPresenter-osx-x64.pkg"
+              sha256 "{sha256(intel_pkg)}"
+              pkg "SlideDevPresenter-osx-x64.pkg"
+            end
+
+            name "SlideDevPresenter"
+            desc "Desktop presenter for Slidev presentations"
+            homepage "https://github.com/norschel/SlidevPresenter"
+
+            uninstall pkgutil: "com.norschel.slidedevpresenter",
+                     delete: "/Applications/SlideDevPresenter.app"
+          end
+          '''
+          (assets / "slide-dev-presenter.rb").write_text(cask)
+
+          package_id = "slidedevpresenter"
+          download_url = (
+              f"https://github.com/norschel/SlidevPresenter/releases/download/"
+              f"{tag}/SlideDevPresenter-win-x64-Setup.exe"
+          )
+          install_script = f'''$ErrorActionPreference = 'Stop'
+          $packageArgs = @{{
+            packageName = '{package_id}'
+            fileType = 'exe'
+            url = '{download_url}'
+            silentArgs = '--silent'
+            validExitCodes = @(0)
+            checksum = '{sha256(windows_setup)}'
+            checksumType = 'sha256'
+          }}
+          Install-ChocolateyPackage @packageArgs
+          '''
+          uninstall_script = r'''$uninstallKey = Get-UninstallRegistryKey -SoftwareName 'SlideDevPresenter*' |
+            Select-Object -First 1
+          if ($uninstallKey) {
+            $uninstallString = $uninstallKey.QuietUninstallString
+            if (-not $uninstallString) {
+              $uninstallString = $uninstallKey.UninstallString
+            }
+            $match = [regex]::Match(
+              $uninstallString,
+              '^\s*"(?<quoted>[^"]*Update\.exe)"(?:\s|$)|^\s*(?<plain>\S*Update\.exe)(?:\s|$)',
+              [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+            )
+            if (-not $match.Success) {
+              throw 'Could not locate the SlideDevPresenter updater for uninstall.'
+            }
+            $updateExe = if ($match.Groups['quoted'].Success) {
+              $match.Groups['quoted'].Value
+            } else {
+              $match.Groups['plain'].Value
+            }
+            if (-not (Test-Path $updateExe)) {
+              throw 'The SlideDevPresenter updater is missing; uninstall it from Windows Settings.'
+            }
+            $process = Start-Process -FilePath $updateExe -ArgumentList @('--uninstall', '-s') -Wait -PassThru
+            if ($process.ExitCode -ne 0) {
+              throw "SlideDevPresenter uninstall failed with exit code $($process.ExitCode)."
+            }
+          }
+          '''
+          nuspec = f'''<?xml version="1.0"?>
+          <package>
+            <metadata>
+              <id>{package_id}</id>
+              <version>{version}</version>
+              <title>SlideDevPresenter</title>
+              <authors>norschel</authors>
+              <projectUrl>https://github.com/norschel/SlidevPresenter</projectUrl>
+              <description>Desktop presenter for Slidev presentations.</description>
+              <requireLicenseAcceptance>false</requireLicenseAcceptance>
+            </metadata>
+          </package>
+          '''
+          nupkg = assets / f"{package_id}.{version}.nupkg"
+          with zipfile.ZipFile(nupkg, "w", zipfile.ZIP_DEFLATED) as package:
+              package.writestr(f"{package_id}.nuspec", nuspec)
+              package.writestr("tools/chocolateyInstall.ps1", install_script)
+              package.writestr("tools/chocolateyUninstall.ps1", uninstall_script)
+          PY
       - name: Upload installers and update feeds to a draft release
         env:
           GH_TOKEN: ${{ github.token }}
