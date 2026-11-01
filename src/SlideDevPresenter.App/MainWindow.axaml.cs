@@ -102,7 +102,20 @@ public partial class MainWindow : Window
         if (TryActivateOpenDialog())
             return;
 
-        await ShowDialogOnceAsync(new AboutWindow(_viewModel?.AppVersion ?? "unknown"));
+        var updates = new AppUpdateViewModel(new AppUpdateService(), async () =>
+        {
+            if (_viewModel is not null)
+            {
+                await _viewModel.StopAsync();
+                await _viewModel.SettingsService.SaveAsync();
+            }
+        }, () =>
+        {
+            if (Avalonia.Application.Current?.ApplicationLifetime is
+                Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+                desktop.Shutdown();
+        });
+        await ShowDialogOnceAsync(new AboutWindow(_viewModel?.AppVersion ?? "unknown", updates));
     }
 
     // The macOS application menu stays enabled while a modal dialog is key, so About/Settings… must

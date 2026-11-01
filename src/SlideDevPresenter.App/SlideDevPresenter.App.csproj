@@ -23,11 +23,16 @@
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.14" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.14" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SlideDevPresenter.Core\SlideDevPresenter.Core.csproj" />
     <ProjectReference Include="..\SlideDevPresenter.Infrastructure\SlideDevPresenter.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SlideDevPresenter.Tests" />
   </ItemGroup>
 
   <ItemGroup>

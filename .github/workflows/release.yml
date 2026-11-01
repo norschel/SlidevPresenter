@@ -1,0 +1,362 @@
+name: Package desktop release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  VELOPACK_VERSION: '1.2.161'
+  APP_PROJECT: src/SlideDevPresenter.App/SlideDevPresenter.App.csproj
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Validate release tag
+        id: version
+        shell: bash
+        run: |
+          identifier='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+          pattern="^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-${identifier}(\.${identifier})*)?$"
+          if [[ ! "$GITHUB_REF_NAME" =~ $pattern ]]; then
+            echo "Release tags must be vMAJOR.MINOR.PATCH with an optional SemVer pre-release suffix (e.g. -beta.1)."
+            exit 1
+          fi
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+      - run: dotnet restore SlideDevPresenter.sln
+      - run: dotnet build SlideDevPresenter.sln --configuration Release --no-restore
+      - run: dotnet test SlideDevPresenter.sln --configuration Release --no-build
+
+  package:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            rid: win-x64
+            executable: SlideDevPresenter.App.exe
+          - runner: macos-15
+            rid: osx-x64
+            executable: SlideDevPresenter.App
+          - runner: macos-15
+            rid: osx-arm64
+            executable: SlideDevPresenter.App
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install packaging tool
+        run: dotnet tool install --global vpk --version ${{ env.VELOPACK_VERSION }}
+      - name: Publish self-contained application
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+          RID: ${{ matrix.rid }}
+        run: |
+          dotnet publish $env:APP_PROJECT --configuration Release --runtime $env:RID --self-contained true `
+            -p:Version=$env:VERSION -p:PublishSingleFile=false -p:PublishTrimmed=false --output publish
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Generate macOS application icon
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/app.iconset"
+          sips -s format png src/SlideDevPresenter.App/Assets/appicon.ico --out "$RUNNER_TEMP/app.png"
+          for size in 16 32 128 256 512; do
+            sips -z "$size" "$size" "$RUNNER_TEMP/app.png" --out "$RUNNER_TEMP/app.iconset/icon_${size}x${size}.png"
+            double=$((size * 2))
+            sips -z "$double" "$double" "$RUNNER_TEMP/app.png" --out "$RUNNER_TEMP/app.iconset/icon_${size}x${size}@2x.png"
+          done
+          iconutil -c icns "$RUNNER_TEMP/app.iconset" -o "$RUNNER_TEMP/app.icns"
+      - name: Configure optional macOS signing and notarization
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.MACOS_APPLE_PASSWORD }}
+          TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+        run: |
+          if [[ -z "$CERTIFICATE" ]]; then
+            echo "No macOS certificate configured; creating unsigned packages."
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/release.keychain-db"
+          keychain_key=$(uuidgen)
+          echo "::add-mask::$keychain_key"
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security list-keychains -d user | sed 's/^[[:space:]]*"//; s/"[[:space:]]*$//' > "$RUNNER_TEMP/original-keychains"
+          security create-keychain -p "$keychain_key" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_key" "$keychain"
+          keychains=()
+          while IFS= read -r existing; do
+            keychains+=("$existing")
+          done < "$RUNNER_TEMP/original-keychains"
+          security list-keychains -d user -s "$keychain" "${keychains[@]}"
+          security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_key" "$keychain"
+          xcrun notarytool store-credentials release-notary --keychain "$keychain" \
+            --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APPLE_PASSWORD"
+          echo "MACOS_SIGNING_ENABLED=true" >> "$GITHUB_ENV"
+      - name: Package application
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+          RID: ${{ matrix.rid }}
+          MAIN_EXE: ${{ matrix.executable }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE_PFX }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          MACOS_APP_IDENTITY: ${{ secrets.MACOS_SIGN_APP_IDENTITY }}
+          MACOS_INSTALL_IDENTITY: ${{ secrets.MACOS_SIGN_INSTALL_IDENTITY }}
+        run: |
+          $arguments = @(
+            "pack", "--packId", "SlideDevPresenter", "--packVersion", $env:VERSION,
+            "--packDir", "publish", "--mainExe", $env:MAIN_EXE,
+            "--packTitle", "SlideDevPresenter", "--runtime", $env:RID,
+            "--channel", $env:RID, "--outputDir", "Releases", "--delta", "None"
+          )
+          if ($IsWindows) {
+            $arguments += @("--icon", "src/SlideDevPresenter.App/Assets/appicon.ico", "--framework", "webview2")
+            if ($env:WINDOWS_CERTIFICATE) {
+              $certificatePath = Join-Path $env:RUNNER_TEMP "signing.pfx"
+              [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+              $importOptions = @{
+                FilePath = $certificatePath
+                CertStoreLocation = "Cert:\CurrentUser\My"
+                Password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+              }
+              $certificate = Import-PfxCertificate @importOptions
+              $arguments += @("--signParams", "/sha1 $($certificate.Thumbprint) /fd SHA256 /tr http://timestamp.digicert.com /td SHA256")
+            }
+          } else {
+            $arguments += @("--bundleId", "com.norschel.slidedevpresenter", "--icon", (Join-Path $env:RUNNER_TEMP "app.icns"))
+            if ($env:MACOS_SIGNING_ENABLED -eq "true") {
+              if (!$env:MACOS_APP_IDENTITY -or !$env:MACOS_INSTALL_IDENTITY) {
+                throw "Both macOS signing identities must be configured."
+              }
+              $arguments += @(
+                "--signAppIdentity", $env:MACOS_APP_IDENTITY, "--signInstallIdentity", $env:MACOS_INSTALL_IDENTITY,
+                "--notaryProfile", "release-notary", "--keychain", (Join-Path $env:RUNNER_TEMP "release.keychain-db")
+              )
+            }
+          }
+          vpk @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Add package-manager installer asset
+        shell: pwsh
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          $extension = if ($IsWindows) { "*.exe" } else { "*.pkg" }
+          $installers = @(Get-ChildItem Releases -File -Filter $extension)
+          if ($installers.Count -ne 1) {
+            throw "Expected one $extension installer in Releases, found $($installers.Count)."
+          }
+          $name = if ($IsWindows) { "SlideDevPresenter-win-x64-Setup.exe" } else { "SlideDevPresenter-$env:RID.pkg" }
+          Copy-Item $installers[0].FullName (Join-Path Releases $name)
+      - name: Remove temporary signing credentials
+        if: always()
+        shell: pwsh
+        run: |
+          Remove-Item (Join-Path $env:RUNNER_TEMP "signing.p12"), (Join-Path $env:RUNNER_TEMP "signing.pfx") -ErrorAction SilentlyContinue
+          if ($IsMacOS) {
+            $originalKeychains = Join-Path $env:RUNNER_TEMP "original-keychains"
+            if (Test-Path $originalKeychains) {
+              $keychains = @(Get-Content $originalKeychains)
+              security list-keychains -d user -s @keychains
+            }
+            if (Test-Path (Join-Path $env:RUNNER_TEMP "release.keychain-db")) {
+              security delete-keychain (Join-Path $env:RUNNER_TEMP "release.keychain-db")
+            }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.rid }}
+          path: Releases/*
+          if-no-files-found: error
+
+  release:
+    needs: [verify, package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: release-assets
+          merge-multiple: true
+      - name: Create Homebrew and Chocolatey packages
+        if: needs.verify.outputs.prerelease == 'false'
+        env:
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import os
+          import uuid
+          import zipfile
+          from pathlib import Path
+
+          assets = Path("release-assets")
+          version = os.environ["TAG"][1:]
+          tag = os.environ["TAG"]
+
+          def sha256(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          intel_pkg = assets / "SlideDevPresenter-osx-x64.pkg"
+          arm_pkg = assets / "SlideDevPresenter-osx-arm64.pkg"
+          windows_setup = assets / "SlideDevPresenter-win-x64-Setup.exe"
+          cask = f'''cask "slide-dev-presenter" do
+            version "{version}"
+
+            on_arm do
+              url "https://github.com/norschel/SlidevPresenter/releases/download/{tag}/SlideDevPresenter-osx-arm64.pkg"
+              sha256 "{sha256(arm_pkg)}"
+              pkg "SlideDevPresenter-osx-arm64.pkg"
+            end
+
+            on_intel do
+              url "https://github.com/norschel/SlidevPresenter/releases/download/{tag}/SlideDevPresenter-osx-x64.pkg"
+              sha256 "{sha256(intel_pkg)}"
+              pkg "SlideDevPresenter-osx-x64.pkg"
+            end
+
+            name "SlideDevPresenter"
+            desc "Desktop presenter for Slidev presentations"
+            homepage "https://github.com/norschel/SlidevPresenter"
+
+            uninstall pkgutil: "com.norschel.slidedevpresenter",
+                     delete: "/Applications/SlideDevPresenter.app"
+          end
+          '''
+          (assets / "slide-dev-presenter.rb").write_text(cask)
+
+          package_id = "slidedevpresenter"
+          metadata_id = uuid.uuid4().hex
+          download_url = (
+              f"https://github.com/norschel/SlidevPresenter/releases/download/"
+              f"{tag}/SlideDevPresenter-win-x64-Setup.exe"
+          )
+          install_script = f'''$ErrorActionPreference = 'Stop'
+          $packageArgs = @{{
+            packageName = '{package_id}'
+            fileType = 'exe'
+            url = '{download_url}'
+            silentArgs = '--silent'
+            validExitCodes = @(0)
+            checksum = '{sha256(windows_setup)}'
+            checksumType = 'sha256'
+          }}
+          Install-ChocolateyPackage @packageArgs
+          '''
+          uninstall_script = r'''$uninstallKey = Get-UninstallRegistryKey -SoftwareName 'SlideDevPresenter*' |
+            Select-Object -First 1
+          if ($uninstallKey) {
+            $uninstallString = $uninstallKey.QuietUninstallString
+            if (-not $uninstallString) {
+              $uninstallString = $uninstallKey.UninstallString
+            }
+            $match = [regex]::Match(
+              $uninstallString,
+              '^\s*"(?<quoted>[^"]*Update\.exe)"(?:\s|$)|^\s*(?<plain>\S*Update\.exe)(?:\s|$)',
+              [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+            )
+            if (-not $match.Success) {
+              throw 'Could not locate the SlideDevPresenter updater for uninstall.'
+            }
+            $updateExe = if ($match.Groups['quoted'].Success) {
+              $match.Groups['quoted'].Value
+            } else {
+              $match.Groups['plain'].Value
+            }
+            if (-not (Test-Path $updateExe)) {
+              throw 'The SlideDevPresenter updater is missing; uninstall it from Windows Settings.'
+            }
+            $process = Start-Process -FilePath $updateExe -ArgumentList @('--uninstall', '-s') -Wait -PassThru
+            if ($process.ExitCode -ne 0) {
+              throw "SlideDevPresenter uninstall failed with exit code $($process.ExitCode)."
+            }
+          }
+          '''
+          nuspec = f'''<?xml version="1.0"?>
+          <package>
+            <metadata>
+              <id>{package_id}</id>
+              <version>{version}</version>
+              <title>SlideDevPresenter</title>
+              <authors>norschel</authors>
+              <projectUrl>https://github.com/norschel/SlidevPresenter</projectUrl>
+              <description>Desktop presenter for Slidev presentations.</description>
+              <requireLicenseAcceptance>false</requireLicenseAcceptance>
+            </metadata>
+          </package>
+          '''
+          metadata_path = f"package/services/metadata/core-properties/{metadata_id}.psmdcp"
+          relationships = f'''<?xml version="1.0" encoding="utf-8"?>
+          <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+            <Relationship Type="http://schemas.microsoft.com/packaging/2010/07/manifest" Target="/{package_id}.nuspec" Id="R0" />
+            <Relationship Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="/{metadata_path}" Id="R1" />
+          </Relationships>
+          '''
+          core_properties = f'''<?xml version="1.0" encoding="utf-8"?>
+          <coreProperties xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns="http://schemas.openxmlformats.org/package/2006/metadata/core-properties">
+            <dc:creator>norschel</dc:creator>
+            <dc:description>Desktop presenter for Slidev presentations.</dc:description>
+            <dc:identifier>SlideDevPresenter</dc:identifier>
+            <version>{version}</version>
+          </coreProperties>
+          '''
+          nupkg = assets / f"{package_id}.{version}.nupkg"
+          with zipfile.ZipFile(nupkg, "w", zipfile.ZIP_DEFLATED) as package:
+              package.writestr("_rels/.rels", relationships)
+              package.writestr(f"{package_id}.nuspec", nuspec)
+              package.writestr(metadata_path, core_properties)
+              package.writestr("tools/chocolateyInstall.ps1", install_script)
+              package.writestr("tools/chocolateyUninstall.ps1", uninstall_script)
+          PY
+      - name: Upload installers and update feeds to a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != "true" ]]; then
+              echo "Refusing to overwrite a published release."
+              exit 1
+            fi
+          else
+            gh release create "$TAG" --verify-tag --draft --prerelease="$PRERELEASE" --title "SlideDevPresenter $TAG" --generate-notes
+          fi
+          gh release edit "$TAG" --prerelease="$PRERELEASE"
+          gh release upload "$TAG" release-assets/* --clobber
