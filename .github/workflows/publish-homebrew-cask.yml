@@ -1,32 +1,75 @@
 name: Publish Homebrew cask
 
 on:
+  workflow_run:
+    workflows: ["Package desktop release"]
+    types: [completed]
   release:
     types: [published, edited]
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
   publish:
-    if: github.event.release.draft == false && github.event.release.prerelease == false
+    if: >-
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository) ||
+      (github.event_name == 'release' &&
+       github.event.release.draft == false &&
+       github.event.release.prerelease == false)
     runs-on: ubuntu-latest
     steps:
+      - name: Check release readiness
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.workflow_run.head_branch || github.event.release.tag_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_json=$(gh release view "$TAG" --json isDraft,isPrerelease,assets)
+          if [[ "$(jq '.isDraft or .isPrerelease' <<< "$release_json")" == "true" ]]; then
+            echo "Release $TAG is not public and stable; leaving the tap unchanged."
+            exit 0
+          fi
+          if [[ "$EVENT_NAME" == "release" ]]; then
+            runs=$(gh run list --repo "$GH_REPO" --workflow release.yml \
+              --branch "$TAG" --event push --limit 1 --json status,conclusion)
+            if ! jq -e '.[0].status == "completed" and .[0].conclusion == "success"' <<< "$runs" >/dev/null; then
+              echo "Packaging has not succeeded for $TAG; leaving publication to packaging completion."
+              exit 0
+            fi
+          fi
+          if ! jq -e 'any(.assets[]; .name == "slide-dev-presenter.rb")' <<< "$release_json" >/dev/null; then
+            echo "::error::Packaging succeeded but release $TAG has no Homebrew cask."
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
       - name: Check out Homebrew tap
+        if: steps.release.outputs.ready == 'true'
         uses: actions/checkout@v4
         with:
           repository: norschel/homebrew-slidedevpresenter
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
       - name: Download release cask
+        if: steps.release.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ steps.release.outputs.tag }}
         run: gh release download "$TAG" --repo "$GH_REPO" --pattern slide-dev-presenter.rb --dir "$RUNNER_TEMP"
       - name: Publish cask to tap
+        if: steps.release.outputs.ready == 'true'
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
           cask="$RUNNER_TEMP/slide-dev-presenter.rb"
