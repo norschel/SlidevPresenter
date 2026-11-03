@@ -213,6 +213,32 @@ jobs:
           pattern: desktop-*
           path: release-assets
           merge-multiple: true
+      - name: Restore published installers for package checksums
+        if: needs.verify.outputs.prerelease == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          if ! release_json="$(gh release view "$TAG" --json isDraft,assets 2>/dev/null)"; then
+            echo "No existing release; using the installers from this run."
+            exit 0
+          fi
+          if [[ "$(jq -r '.isDraft' <<< "$release_json")" == "true" ]]; then
+            echo "Release is a draft; using the installers from this run."
+            exit 0
+          fi
+
+          existing_assets=$(jq -r '.assets[].name' <<< "$release_json")
+          for asset in \
+            SlideDevPresenter-osx-x64.pkg \
+            SlideDevPresenter-osx-arm64.pkg \
+            SlideDevPresenter-win-x64-Setup.exe; do
+            if grep -Fqx -- "$asset" <<< "$existing_assets"; then
+              gh release download "$TAG" --pattern "$asset" --dir release-assets --clobber
+            fi
+          done
       - name: Create Homebrew and Chocolatey packages
         if: needs.verify.outputs.prerelease == 'false'
         env:
