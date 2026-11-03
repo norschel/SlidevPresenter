@@ -5,6 +5,7 @@ on:
     types: [published, edited]
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -12,6 +13,32 @@ jobs:
     if: github.event.release.draft == false && github.event.release.prerelease == false
     runs-on: ubuntu-latest
     steps:
+      - name: Wait for desktop release packaging
+        timeout-minutes: 65
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for ((attempt = 1; attempt <= 120; attempt++)); do
+            runs=$(gh run list --repo "$GH_REPO" --workflow release.yml \
+              --branch "$TAG" --event push --limit 1 --json databaseId,status,conclusion)
+            if [[ "$(jq -r '.[0].status' <<< "$runs")" == "completed" ]]; then
+              conclusion=$(jq -r '.[0].conclusion' <<< "$runs")
+              if [[ "$conclusion" != "success" ]]; then
+                echo "::error::Desktop release packaging for $TAG finished with: $conclusion"
+                exit 1
+              fi
+              echo "Desktop release packaging for $TAG succeeded."
+              exit 0
+            fi
+            echo "Waiting for desktop release packaging for $TAG ($attempt/120)."
+            sleep 30
+          done
+          echo "::error::Timed out waiting for desktop release packaging for $TAG."
+          exit 1
       - name: Check out Homebrew tap
         uses: actions/checkout@v4
         with:
