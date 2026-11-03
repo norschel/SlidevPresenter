@@ -178,7 +178,9 @@ jobs:
             throw "Expected one $extension installer in Releases, found $($installers.Count)."
           }
           $name = if ($IsWindows) { "SlideDevPresenter-win-x64-Setup.exe" } else { "SlideDevPresenter-$env:RID.pkg" }
-          Copy-Item $installers[0].FullName (Join-Path Releases $name)
+          if ($installers[0].Name -ne $name) {
+            Copy-Item $installers[0].FullName (Join-Path Releases $name)
+          }
       - name: Remove temporary signing credentials
         if: always()
         shell: pwsh
