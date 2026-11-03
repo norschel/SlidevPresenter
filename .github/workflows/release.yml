@@ -353,12 +353,29 @@ jobs:
         shell: bash
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != "true" ]]; then
-              echo "Refusing to overwrite a published release."
-              exit 1
+            if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" == "true" ]]; then
+              gh release edit "$TAG" --prerelease="$PRERELEASE"
+              gh release upload "$TAG" release-assets/* --clobber
+            else
+              echo "Release is published; uploading only missing assets."
+              existing_assets=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+              assets_to_upload=()
+              for asset in release-assets/*; do
+                asset_name="${asset##*/}"
+                if grep -Fqx -- "$asset_name" <<< "$existing_assets"; then
+                  echo "Keeping existing published asset: $asset_name"
+                else
+                  assets_to_upload+=("$asset")
+                fi
+              done
+              if ((${#assets_to_upload[@]})); then
+                gh release upload "$TAG" "${assets_to_upload[@]}"
+              else
+                echo "No missing assets to upload."
+              fi
             fi
           else
             gh release create "$TAG" --verify-tag --draft --prerelease="$PRERELEASE" --title "SlideDevPresenter $TAG" --generate-notes
+            gh release edit "$TAG" --prerelease="$PRERELEASE"
+            gh release upload "$TAG" release-assets/* --clobber
           fi
-          gh release edit "$TAG" --prerelease="$PRERELEASE"
-          gh release upload "$TAG" release-assets/* --clobber
