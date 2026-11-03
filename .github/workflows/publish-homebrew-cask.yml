@@ -2,14 +2,14 @@ name: Publish Homebrew cask
 
 on:
   release:
-    types: [published]
+    types: [published, edited]
 
 permissions:
   contents: read
 
 jobs:
   publish:
-    if: github.event.release.prerelease == false
+    if: github.event.release.draft == false && github.event.release.prerelease == false
     runs-on: ubuntu-latest
     steps:
       - name: Check out Homebrew tap
