@@ -1,0 +1,47 @@
+name: Publish Homebrew cask
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: norschel/homebrew-slidedevpresenter
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - name: Download release cask
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release download "$TAG" --repo "$GH_REPO" --pattern slide-dev-presenter.rb --dir "$RUNNER_TEMP"
+      - name: Publish cask to tap
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          cask="$RUNNER_TEMP/slide-dev-presenter.rb"
+          grep -Fq 'cask "slide-dev-presenter" do' "$cask"
+          grep -Fq "releases/download/$TAG/" "$cask"
+
+          mkdir -p tap/Casks
+          install -m 0644 "$cask" tap/Casks/slide-dev-presenter.rb
+          if git -C tap diff --quiet -- Casks/slide-dev-presenter.rb; then
+            echo "Homebrew cask is already up to date."
+            exit 0
+          fi
+
+          git -C tap config user.name "github-actions[bot]"
+          git -C tap config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C tap add Casks/slide-dev-presenter.rb
+          git -C tap commit -m "Update SlideDevPresenter cask to $TAG"
+          git -C tap push
