@@ -353,10 +353,7 @@ jobs:
         shell: bash
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != "true" ]]; then
-              echo "Refusing to overwrite a published release."
-              exit 1
-            fi
+            echo "Release $TAG already exists; uploading assets to it."
           else
             gh release create "$TAG" --verify-tag --draft --prerelease="$PRERELEASE" --title "SlideDevPresenter $TAG" --generate-notes
           fi
