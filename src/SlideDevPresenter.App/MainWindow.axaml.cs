@@ -153,8 +153,13 @@ public partial class MainWindow : Window
             return;
 
         var windowMenus = ApplicationMenuFactory.Create(isMacOS: true, CreateApplicationMenuCommands());
-        foreach (var item in windowMenus.Items)
+        var items = windowMenus.Items.ToList();
+        // NativeMenu rejects items that still belong to another menu, so detach them first.
+        foreach (var item in items)
+        {
+            windowMenus.Items.Remove(item);
             applicationMenu.Items.Add(item);
+        }
 
         _applicationMenu = applicationMenu;
     }
