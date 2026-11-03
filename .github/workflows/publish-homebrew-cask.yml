@@ -35,13 +35,13 @@ jobs:
 
           mkdir -p tap/Casks
           install -m 0644 "$cask" tap/Casks/slide-dev-presenter.rb
-          if git -C tap diff --quiet -- Casks/slide-dev-presenter.rb; then
+          git -C tap add Casks/slide-dev-presenter.rb
+          if git -C tap diff --cached --quiet -- Casks/slide-dev-presenter.rb; then
             echo "Homebrew cask is already up to date."
             exit 0
           fi
 
           git -C tap config user.name "github-actions[bot]"
           git -C tap config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C tap add Casks/slide-dev-presenter.rb
           git -C tap commit -m "Update SlideDevPresenter cask to $TAG"
           git -C tap push
