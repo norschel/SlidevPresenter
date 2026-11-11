@@ -2,6 +2,14 @@
 
 SlideDevPresenter is a local desktop host for Slidev presentations. It provides a PowerPoint-like experience for developers by combining a presentation library, Slidev process hosting, embedded Presenter View, participant display management, settings, thumbnails, agenda, and timer support.
 
+## Presentation Features
+
+- Start a deck from the beginning, from the selected slide, or directly in Presenter View. Slidev remains a dev server so its presenter navigation stays synchronized with the participant view.
+- Show the participant window on another display, choose its target display, and swap the presenter and participant surfaces. App-side blank-screen controls are mirrored between the two views.
+- Use the slide thumbnails, agenda, and presentation timer panels alongside the embedded presentation.
+- Open links from a deck in embedded browser tabs or in the system browser, according to navigation settings. If embedded WebView access is denied, the app can fall back to the external browser for the session.
+- Export a selected local Slidev project as a PDF with Slidev's export command. Hosted presentations cannot be exported by the app.
+
 ## Install and Update
 
 Download an installer from [GitHub Releases](https://github.com/norschel/SlidevPresenter/releases/latest):
@@ -66,3 +74,15 @@ Starting a local or repository presentation first installs its dependencies and 
 Install Node.js and the project's package manager on PATH. The app honors `packageManager` in package.json, otherwise selecting npm, pnpm, Yarn or Bun from the lockfile. Dependency installation is reused until the manifests or lockfiles change, including after branch switches. Compilation runs on each start and writes Slidev's normal `dist` output. Projects need a package.json with `@slidev/cli` as a dependency or devDependency.
 
 Compilation and dependency failures stop launch and show recovery details. Fix package-registry authentication, dependency issues or Slidev errors manually in the project folder, then retry. **Stop** cancels an in-progress install or build. Project dependency installation and compilation can execute code from the repository, so only use trusted projects.
+
+## Development
+
+The solution targets .NET 10. Install the .NET 10 SDK, then run these commands from the repository root:
+
+```sh
+dotnet build ./SlideDevPresenter.sln
+dotnet test ./SlideDevPresenter.sln
+dotnet run --project ./src/SlideDevPresenter.App/SlideDevPresenter.App.csproj
+```
+
+The build-and-test workflow also runs Release builds and tests on Ubuntu, Windows, and macOS for pushes and pull requests. Unit tests use local fakes and do not require a Git checkout, network access, or the real user settings directory.
