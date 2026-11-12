@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Diagnostics;
 using SlideDevPresenter.Core.Models;
 using SlideDevPresenter.Core.Services;
 using SlideDevPresenter.Infrastructure.Services;
@@ -11,19 +12,39 @@ namespace SlideDevPresenter.Tests.Services;
 internal sealed class FakeRunningProcess : IRunningProcess
 {
     private bool _hasExited;
+    private readonly TaskCompletionSource _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public bool HasExited => _hasExited;
+    public Action? OnStart { get; set; }
+    public int KillCount { get; private set; }
+    public bool UseProcessSenderOnExit { get; set; }
 
     public event EventHandler<string?>? OutputDataReceived;
     public event EventHandler? Exited;
 
-    public void Kill(bool entireProcessTree = true) { /* no-op: caller manages transition */ }
+    public void Start() => OnStart?.Invoke();
+    public void Kill(bool entireProcessTree = true)
+    {
+        KillCount++;
+        SimulateExit();
+    }
+    public Task WaitForExitAsync(CancellationToken cancellationToken) => _exited.Task.WaitAsync(cancellationToken);
+    public void Dispose() { }
 
     public void SimulateOutput(string line) => OutputDataReceived?.Invoke(this, line);
 
     public void SimulateExit()
     {
         _hasExited = true;
-        Exited?.Invoke(this, EventArgs.Empty);
+        _exited.TrySetResult();
+        if (UseProcessSenderOnExit)
+        {
+            using var processSender = new Process();
+            Exited?.Invoke(processSender, EventArgs.Empty);
+        }
+        else
+        {
+            Exited?.Invoke(this, EventArgs.Empty);
+        }
     }
 }
 
@@ -72,6 +93,109 @@ public class SlidevProcessHostTests
         Assert.Equal(HostState.Error, host.State);
         Assert.Contains("Fix manually", host.ErrorMessage);
         Assert.Equal(0, processCount);
+    }
+
+    [Fact]
+    public async Task StartAsync_CapturesReadyOutputEmittedDuringActivation()
+    {
+        var fake = new FakeRunningProcess();
+        fake.OnStart = () => fake.SimulateOutput("  ➜  Local:   http://localhost:3030/");
+        var host = new SlidevProcessHost(NullLogger<SlidevProcessHost>.Instance, _ => fake);
+
+        await host.StartAsync(MakeProject(), 3030);
+
+        Assert.Equal(HostState.Running, host.State);
+        Assert.Equal("http://localhost:3030/", host.ParticipantUrl);
+    }
+
+    [Fact]
+    public async Task StartAsync_CapturesExitDuringActivation()
+    {
+        var fake = new FakeRunningProcess();
+        fake.OnStart = fake.SimulateExit;
+        var host = new SlidevProcessHost(NullLogger<SlidevProcessHost>.Instance, _ => fake);
+
+        await host.StartAsync(MakeProject(), 3030);
+
+        Assert.Equal(HostState.Error, host.State);
+        Assert.Contains("exited", host.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task StartAsync_SilentProcessTimesOutAndIsStopped()
+    {
+        var timeout = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fake = new FakeRunningProcess();
+        var host = new SlidevProcessHost(
+            NullLogger<SlidevProcessHost>.Instance,
+            _ => fake,
+            readinessTimeout: TimeSpan.FromSeconds(45),
+            delay: (_, _) => timeout.Task);
+
+        await host.StartAsync(MakeProject(), 3030);
+        var readiness = Assert.IsAssignableFrom<Task>(host.ReadinessTask);
+        timeout.SetResult();
+        await readiness;
+
+        Assert.Equal(HostState.Error, host.State);
+        Assert.Contains("ready URL", host.ErrorMessage);
+        Assert.True(fake.HasExited);
+        Assert.Equal(1, fake.KillCount);
+    }
+
+    [Fact]
+    public async Task StopAsync_ProductionExitSender_DoesNotReportErrorOrCorruptNextStart()
+    {
+        var first = new FakeRunningProcess { UseProcessSenderOnExit = true };
+        var second = new FakeRunningProcess();
+        var processes = new Queue<FakeRunningProcess>([first, second]);
+        var host = new SlidevProcessHost(NullLogger<SlidevProcessHost>.Instance, _ => processes.Dequeue());
+        var states = new List<HostState>();
+        host.StateChanged += (_, e) => states.Add(e.NewState);
+
+        await host.StartAsync(MakeProject(), 3030);
+        await host.StopAsync();
+
+        Assert.DoesNotContain(HostState.Error, states);
+        Assert.Equal(HostState.Idle, host.State);
+
+        await host.StartAsync(MakeProject(), 3031);
+        first.SimulateExit();
+
+        Assert.Equal(HostState.Starting, host.State);
+        Assert.Null(host.ErrorMessage);
+        await host.StopAsync();
+    }
+
+    [Fact]
+    public async Task ReadinessTimeout_RacingReadyOutput_CannotPublishRunningAfterTimeout()
+    {
+        var timeout = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var outputParsed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseOutput = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fake = new FakeRunningProcess();
+        var host = new SlidevProcessHost(
+            NullLogger<SlidevProcessHost>.Instance,
+            _ => fake,
+            readinessTimeout: TimeSpan.FromSeconds(45),
+            delay: (_, _) => timeout.Task,
+            afterReadyOutputParsed: () =>
+            {
+                outputParsed.TrySetResult();
+                releaseOutput.Task.GetAwaiter().GetResult();
+            });
+
+        await host.StartAsync(MakeProject(), 3030);
+        var output = Task.Run(() => fake.SimulateOutput("  ➜  Local:   http://localhost:3030/"));
+        await outputParsed.Task;
+        timeout.SetResult();
+        await host.ReadinessTask!;
+        releaseOutput.SetResult();
+        await output;
+
+        Assert.Equal(HostState.Error, host.State);
+        Assert.Null(host.ParticipantUrl);
+        Assert.Null(host.PresenterUrl);
     }
 
     [Fact]

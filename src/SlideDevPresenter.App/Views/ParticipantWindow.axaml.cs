@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using SlideDevPresenter.App.Services;
+using SlideDevPresenter.Core.Models;
 
 namespace SlideDevPresenter.App.Views;
 
@@ -13,15 +14,19 @@ public partial class ParticipantWindow : Window
     private readonly IExternalBrowserLauncher _browserLauncher;
     private readonly WebViewNavigationPolicy _navigationPolicy;
     private readonly PresentationEscapeHandler _escapeHandler;
+    private readonly NavigationSettings? _navigationSettings;
     private bool _exitRaised;
     private bool _isFullscreenRequested;
     private bool _isScreenBlanked;
+    private bool _isScreenWhite;
+    private bool _hasLoadedPage;
 
     /// <summary>Raised when the user requests to exit the presentation (e.g. via ESC).</summary>
     public event EventHandler? PresentationExited;
 
     /// <summary>Raised when the user navigates to an external URL from within the presentation.</summary>
     public event EventHandler<Uri>? ExternalLinkNavigated;
+    public event EventHandler<PresentationBlankStateChangedEventArgs>? BlankStateChanged;
 
     /// <summary>Parameterless constructor for the Avalonia designer.</summary>
     public ParticipantWindow()
@@ -38,12 +43,14 @@ public partial class ParticipantWindow : Window
         string participantUrl,
         IExternalBrowserLauncher? browserLauncher = null,
         WebViewNavigationPolicy? navigationPolicy = null,
-        PresentationEscapeHandler? escapeHandler = null)
+        PresentationEscapeHandler? escapeHandler = null,
+        NavigationSettings? navigationSettings = null)
     {
         _participantUrl = participantUrl;
         _browserLauncher = browserLauncher ?? new ExternalBrowserLauncher();
         _navigationPolicy = navigationPolicy ?? new WebViewNavigationPolicy();
         _escapeHandler = escapeHandler ?? new PresentationEscapeHandler();
+        _navigationSettings = navigationSettings;
         InitializeComponent();
         AttachHandlers();
         Opened += OnOpened;
@@ -98,6 +105,8 @@ public partial class ParticipantWindow : Window
         try
         {
             await WebView.InvokeScript(WebViewKeyboardBridge.Script);
+            _hasLoadedPage = true;
+            await WebViewKeyboardBridge.SetBlankStateAsync(WebView, _isScreenBlanked, _isScreenWhite);
         }
         catch (Exception exception)
         {
@@ -134,8 +143,9 @@ public partial class ParticipantWindow : Window
 
         try
         {
-            _isScreenBlanked = false;
             await WebView.InvokeScript(WebViewKeyboardBridge.Script);
+            _hasLoadedPage = true;
+            await WebViewKeyboardBridge.SetBlankStateAsync(WebView, _isScreenBlanked, _isScreenWhite);
             WebView.Focus();
         }
         catch (Exception exception)
@@ -147,7 +157,11 @@ public partial class ParticipantWindow : Window
     private void OnWebViewWebMessageReceived(object? sender, WebMessageReceivedEventArgs e)
     {
         if (WebViewKeyboardBridge.GetBlankState(e.Body) is bool isBlanked)
+        {
             _isScreenBlanked = isBlanked;
+            _isScreenWhite = isBlanked && WebViewKeyboardBridge.IsWhiteBlankMessage(e.Body);
+            BlankStateChanged?.Invoke(this, new PresentationBlankStateChangedEventArgs(_isScreenBlanked, _isScreenWhite));
+        }
 
         if (WebViewKeyboardBridge.IsEscapeMessage(e.Body))
             _escapeHandler.TryHandle(Key.Escape);
@@ -167,8 +181,7 @@ public partial class ParticipantWindow : Window
         if (!_navigationPolicy.ShouldOpenExternally(e.Request, WebView.Source))
             return;
 
-        _browserLauncher.Open(e.Request);
-        ExternalLinkNavigated?.Invoke(this, e.Request);
+        RouteExternalLink(e.Request);
         e.Cancel = true;
     }
 
@@ -179,14 +192,25 @@ public partial class ParticipantWindow : Window
 
         if (_navigationPolicy.ShouldOpenExternally(e.Request, WebView.Source))
         {
-            _browserLauncher.Open(e.Request);
-            ExternalLinkNavigated?.Invoke(this, e.Request);
+            RouteExternalLink(e.Request);
             e.Handled = true;
             return;
         }
 
         WebView.Source = e.Request;
         e.Handled = true;
+    }
+
+    private void RouteExternalLink(Uri uri) =>
+        ExternalLinkRouter.Route(uri, _navigationSettings, _browserLauncher,
+            embeddedUri => ExternalLinkNavigated?.Invoke(this, embeddedUri));
+
+    public void SetBlankState(bool isBlanked, bool isWhite)
+    {
+        _isScreenBlanked = isBlanked;
+        _isScreenWhite = isBlanked && isWhite;
+        if (_hasLoadedPage)
+            _ = WebViewKeyboardBridge.SetBlankStateAsync(WebView, _isScreenBlanked, _isScreenWhite);
     }
 
     private void RaisePresentationExited()

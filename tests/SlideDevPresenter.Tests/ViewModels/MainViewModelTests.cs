@@ -56,16 +56,21 @@ internal sealed class FakeProcessHost : ISlidevProcessHost
     public string? ErrorMessage { get; private set; }
     public int StartCallCount { get; private set; }
     public int StopCallCount { get; private set; }
+    public Task? StartTask { get; set; }
 
     public event EventHandler<HostStateChangedEventArgs>? StateChanged;
 
-    public Task StartAsync(PresentationProject project, int port, CancellationToken cancellationToken = default)
+    public async Task StartAsync(PresentationProject project, int port, CancellationToken cancellationToken = default)
     {
         StartCallCount++;
         Port = port;
         State = HostState.Starting;
         StateChanged?.Invoke(this, new HostStateChangedEventArgs(HostState.Starting));
-        return Task.CompletedTask;
+        if (StartTask is not null)
+        {
+            try { await StartTask.WaitAsync(cancellationToken); }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken = default)
@@ -1029,6 +1034,26 @@ public class MainViewModelTests
 
         Assert.Equal("http://localhost:3030/#/1", vm.ParticipantUrl);
         Assert.Equal("http://localhost:3030/presenter/#/1", vm.PresenterUrl);
+    }
+
+    [Fact]
+    public async Task StartVariants_AreSerializedAndStopWaitsForOwnedStartup()
+    {
+        var host = new FakeProcessHost { StartTask = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously).Task };
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+
+        var startup = vm.StartFromBeginningAsync();
+        Assert.Equal(HostState.Starting, vm.HostState);
+        Assert.False(vm.StartFromCurrentSlideCommand.CanExecute(null));
+        await vm.StartFromCurrentSlideAsync();
+        Assert.Equal(1, host.StartCallCount);
+
+        await vm.StopAsync();
+        await startup;
+
+        Assert.Equal(1, host.StopCallCount);
+        Assert.Equal(HostState.Idle, vm.HostState);
     }
 
     [Fact]

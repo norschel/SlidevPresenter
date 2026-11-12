@@ -35,7 +35,7 @@ public partial class MainWindow : Window
     private Panel? _embeddedWebViewHost;
     private Panel? _browserWebViewHost;
     private bool _embeddedWebViewsDisabledForSession;
-    private bool _isPresentationBlanked;
+    private readonly BlankOverlayStateSynchronizer _blankOverlayState = new();
 
     /// <summary>Parameterless constructor for Avalonia designer.</summary>
     public MainWindow()
@@ -63,6 +63,8 @@ public partial class MainWindow : Window
     {
         _viewModel = viewModel;
         _presentationWindowService = presentationWindowService;
+        if (_presentationWindowService is not null)
+            _presentationWindowService.BlankStateChanged += OnParticipantBlankStateChanged;
         viewModel.ConfirmRepositoryUpdateAsync = ConfirmRepositoryUpdateAsync;
         _shortcutService = shortcutService ?? new ShortcutService(new RuntimePlatformInfo());
         _themeService = themeService ?? new ThemeService();
@@ -641,12 +643,8 @@ public partial class MainWindow : Window
     private void OpenExternalUrl(Uri uri)
     {
         var settings = _viewModel?.SettingsService.Settings.Navigation;
-
-        if (settings is null || settings.OpenExternalLinksInSystemBrowser)
-            _browserLauncher.Open(uri);
-
-        if (settings is null || settings.OpenExternalLinksInEmbeddedBrowser)
-            _viewModel?.OpenInEmbeddedBrowser(uri);
+        ExternalLinkRouter.Route(uri, settings, _browserLauncher,
+            embeddedUri => _viewModel?.OpenInEmbeddedBrowser(embeddedUri));
     }
 
     private void ConfigureShortcutBindings()
@@ -765,7 +763,10 @@ public partial class MainWindow : Window
         try
         {
             if (ReferenceEquals(webView, EmbeddedWebView))
-                _isPresentationBlanked = false;
+            {
+                _blankOverlayState.Apply(false, false);
+                _presentationWindowService?.SetBlankState(false, false);
+            }
 
             await webView.InvokeScript(ReferenceEquals(webView, BrowserWebView)
                 ? WebViewKeyboardBridge.EscapeScript + WebViewKeyboardBridge.DiagnosticsScript
@@ -787,19 +788,26 @@ public partial class MainWindow : Window
 
         if (ReferenceEquals(sender, EmbeddedWebView) && WebViewKeyboardBridge.GetBlankState(e.Body) is bool isBlanked)
         {
-            _isPresentationBlanked = isBlanked;
-            // The blank overlay is injected per page and not synced by Slidev, so mirror it to the participant view.
-            _presentationWindowService?.DispatchPresentationKey(!isBlanked ? Key.Escape
-                : WebViewKeyboardBridge.IsWhiteBlankMessage(e.Body) ? Key.W : Key.B);
+            var isWhite = isBlanked && WebViewKeyboardBridge.IsWhiteBlankMessage(e.Body);
+            if (_blankOverlayState.Apply(isBlanked, isWhite))
+                _presentationWindowService?.SetBlankState(isBlanked, isWhite);
         }
 
         if (WebViewKeyboardBridge.IsEscapeMessage(e.Body))
             HandleEscape();
     }
 
+    private void OnParticipantBlankStateChanged(object? sender, PresentationBlankStateChangedEventArgs e)
+    {
+        if (!_blankOverlayState.Apply(e.IsBlanked, e.IsWhite))
+            return;
+
+        _ = WebViewKeyboardBridge.SetBlankStateAsync(EmbeddedWebView, e.IsBlanked, e.IsWhite);
+    }
+
     private bool TryHandlePresentationKey(KeyEventArgs e) =>
         e.Handled || (!_embeddedWebViewsDisabledForSession && _viewModel?.CanShowEmbeddedSurface == true
-            && WebViewKeyboardBridge.TryHandleKey(EmbeddedWebView, e, _isPresentationBlanked));
+            && WebViewKeyboardBridge.TryHandleKey(EmbeddedWebView, e, _blankOverlayState.IsBlanked));
 
     private void TryHandleEscape(KeyEventArgs e)
     {

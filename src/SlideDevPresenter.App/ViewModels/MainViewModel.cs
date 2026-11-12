@@ -36,6 +36,8 @@ public sealed partial class MainViewModel : ObservableObject
     private int _metadataLoadVersion;
     private bool _hasAutoOpenedForCurrentRun;
     private bool _isHostedSessionActive;
+    private bool _startInProgress;
+    private CancellationTokenSource? _localStartupCancellation;
     private int? _pendingSlideNavigation;
     private string? _lastKnownParticipantUrl;
     private string? _lastKnownPresenterUrl;
@@ -66,6 +68,9 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsSelectPresentationHintVisible))]
     [NotifyCanExecuteChangedFor(nameof(EditSelectedProjectCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartFromBeginningCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartFromCurrentSlideCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartPresenterViewCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
     [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
     [NotifyCanExecuteChangedFor(nameof(RemoveSelectedProjectFromLibraryCommand))]
@@ -93,6 +98,9 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanStartSelectedPresentation))]
     [NotifyPropertyChangedFor(nameof(IsSelectPresentationHintVisible))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartFromBeginningCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartFromCurrentSlideCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartPresenterViewCommand))]
     [NotifyCanExecuteChangedFor(nameof(StopCommand))]
     [NotifyCanExecuteChangedFor(nameof(SwapDisplaysCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
@@ -128,6 +136,9 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanChangeSelectedBranch))]
     [NotifyPropertyChangedFor(nameof(CanStartSelectedPresentation))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartFromBeginningCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartFromCurrentSlideCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartPresenterViewCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
     [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
     private bool _isRefreshing;
@@ -631,6 +642,33 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanLaunch))]
     public async Task LaunchAsync()
     {
+        if (_startInProgress)
+            return;
+        if (IsRefreshing)
+        {
+            SourceMessage = "Wait for the source refresh to finish before starting a presentation.";
+            return;
+        }
+        if (SelectedProject is null || HostState != HostState.Idle)
+            return;
+
+        _startInProgress = true;
+        NotifyStartCommands();
+        try
+        {
+            await LaunchCoreAsync();
+        }
+        finally
+        {
+            _startInProgress = false;
+            _localStartupCancellation?.Dispose();
+            _localStartupCancellation = null;
+            NotifyStartCommands();
+        }
+    }
+
+    private async Task LaunchCoreAsync()
+    {
         if (IsRefreshing)
         {
             SourceMessage = "Wait for the source refresh to finish before starting a presentation.";
@@ -650,10 +688,23 @@ public sealed partial class MainViewModel : ObservableObject
 
         _isHostedSessionActive = false;
         var port = _settingsService.Settings.Defaults.DefaultPort;
-        await _processHost.StartAsync(SelectedProject.ToModel(), port);
+        _localStartupCancellation = new CancellationTokenSource();
+        await _processHost.StartAsync(SelectedProject.ToModel(), port, _localStartupCancellation.Token);
     }
 
-    private bool CanLaunch() => !IsRefreshing && SelectedProject is not null && HostState == HostState.Idle;
+    private bool CanLaunch() => !_startInProgress && !IsRefreshing && SelectedProject is not null && HostState == HostState.Idle;
+    private bool CanStartVariant() => !_startInProgress && !IsRefreshing && SelectedProject is not null
+        && HostState is HostState.Idle or HostState.Running;
+
+    private void NotifyStartCommands()
+    {
+        LaunchCommand.NotifyCanExecuteChanged();
+        StartFromBeginningCommand.NotifyCanExecuteChanged();
+        StartFromCurrentSlideCommand.NotifyCanExecuteChanged();
+        StartPresenterViewCommand.NotifyCanExecuteChanged();
+        ResumeCommand.NotifyCanExecuteChanged();
+        RetryCommand.NotifyCanExecuteChanged();
+    }
 
     [RelayCommand(CanExecute = nameof(CanRemoveSelectedProject))]
     public async Task RemoveSelectedProjectFromLibraryAsync()
@@ -731,20 +782,20 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanStartVariant))]
     public async Task StartFromBeginningAsync()
     {
         await StartForSlideAsync(1, PresentationSurfaceMode.Presenter);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanStartVariant))]
     public async Task StartFromCurrentSlideAsync()
     {
         var currentSlide = SelectedOutlineSlide?.Number ?? 1;
         await StartForSlideAsync(currentSlide, SelectedSurfaceMode);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanStartVariant))]
     public async Task StartPresenterViewAsync()
     {
         var currentSlide = SelectedOutlineSlide?.Number ?? 1;
@@ -754,6 +805,7 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanStop))]
     public async Task StopAsync()
     {
+        _localStartupCancellation?.Cancel();
         if (_isHostedSessionActive)
         {
             StopHostedSession();
@@ -763,7 +815,7 @@ public sealed partial class MainViewModel : ObservableObject
         await _processHost.StopAsync();
     }
 
-    private bool CanStop() => HostState is HostState.Starting or HostState.Running;
+    private bool CanStop() => _startInProgress || HostState is HostState.Starting or HostState.Running;
 
     [RelayCommand(CanExecute = nameof(CanSwapDisplays))]
     public Task SwapDisplaysAsync() => _presentationWindowService.SwapDisplaysAsync();
@@ -777,29 +829,42 @@ public sealed partial class MainViewModel : ObservableObject
         await StartForSlideAsync(slideNumber, SelectedSurfaceMode);
     }
 
-    private bool CanResume() => !IsRefreshing && IsIdle && SelectedProject is not null && HasLastKnownPosition;
+    private bool CanResume() => !_startInProgress && !IsRefreshing && IsIdle && SelectedProject is not null && HasLastKnownPosition;
 
     [RelayCommand(CanExecute = nameof(CanRetry))]
     public async Task RetryAsync()
     {
-        if (SelectedProject is null)
+        if (SelectedProject is null || _startInProgress || !CanRetry())
             return;
 
-        _hasAutoOpenedForCurrentRun = false;
-
-        if (_isHostedSessionActive || SelectedProject.SourceType == PresentationSourceType.HostedUrl)
+        _startInProgress = true;
+        NotifyStartCommands();
+        try
         {
-            StopHostedSession(resetElapsed: false);
-            StartHostedSession(SelectedProject.Location);
-            return;
-        }
+            _hasAutoOpenedForCurrentRun = false;
 
-        await _processHost.StopAsync();
-        var port = _settingsService.Settings.Defaults.DefaultPort;
-        await _processHost.StartAsync(SelectedProject.ToModel(), port);
+            if (_isHostedSessionActive || SelectedProject.SourceType == PresentationSourceType.HostedUrl)
+            {
+                StopHostedSession(resetElapsed: false);
+                StartHostedSession(SelectedProject.Location);
+                return;
+            }
+
+            await _processHost.StopAsync();
+            var port = _settingsService.Settings.Defaults.DefaultPort;
+            _localStartupCancellation = new CancellationTokenSource();
+            await _processHost.StartAsync(SelectedProject.ToModel(), port, _localStartupCancellation.Token);
+        }
+        finally
+        {
+            _startInProgress = false;
+            _localStartupCancellation?.Dispose();
+            _localStartupCancellation = null;
+            NotifyStartCommands();
+        }
     }
 
-    private bool CanRetry() => !IsRefreshing && SelectedProject is not null && HostState == HostState.Error;
+    private bool CanRetry() => !_startInProgress && !IsRefreshing && SelectedProject is not null && HostState == HostState.Error;
 
     [RelayCommand]
     public void OpenCurrentSurfaceInBrowser() => TryOpenBrowser(CurrentSurfaceUrl);
@@ -1205,8 +1270,23 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
+        if (_startInProgress || HostState != HostState.Idle || IsRefreshing || SelectedProject is null)
+            return;
+
+        _startInProgress = true;
+        NotifyStartCommands();
         _pendingSlideNavigation = clampedSlideNumber;
-        await LaunchAsync();
+        try
+        {
+            await LaunchCoreAsync();
+        }
+        finally
+        {
+            _startInProgress = false;
+            _localStartupCancellation?.Dispose();
+            _localStartupCancellation = null;
+            NotifyStartCommands();
+        }
     }
 
     private void NavigateRunningSessionToSlide(int slideNumber)

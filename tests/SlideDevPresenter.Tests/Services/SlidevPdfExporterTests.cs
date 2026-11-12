@@ -6,6 +6,113 @@ namespace SlideDevPresenter.Tests.Services;
 public class SlidevPdfExporterTests
 {
     [Fact]
+    public async Task ExportPdfAsync_PreCanceled_DoesNotLaunchProcess()
+    {
+        var launches = 0;
+        var exporter = new SlidevPdfExporter(_ =>
+        {
+            launches++;
+            return new FakePdfExportProcess();
+        });
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            exporter.ExportPdfAsync(MakeProject(), "talk.pdf", cancellation.Token));
+
+        Assert.Equal(0, launches);
+    }
+
+    [Fact]
+    public async Task ExportPdfAsync_Cancellation_KillsAndReapsProcessTree()
+    {
+        var fake = new FakePdfExportProcess();
+        var exporter = new SlidevPdfExporter(_ => fake, TimeSpan.FromMinutes(1));
+        using var cancellation = new CancellationTokenSource();
+        var export = exporter.ExportPdfAsync(MakeProject(), "talk.pdf", cancellation.Token);
+        await fake.WaitStarted.Task;
+
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => export);
+
+        Assert.Equal(1, fake.KillCount);
+        Assert.True(fake.HasExited);
+        Assert.True(fake.Reaped);
+    }
+
+    [Fact]
+    public async Task ExportPdfAsync_Timeout_KillsAndReapsProcessTree()
+    {
+        var fake = new FakePdfExportProcess();
+        var exporter = new SlidevPdfExporter(_ => fake, TimeSpan.Zero);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            exporter.ExportPdfAsync(MakeProject(), "talk.pdf"));
+
+        Assert.Contains("timed out", exception.Message);
+        Assert.Equal(1, fake.KillCount);
+        Assert.True(fake.HasExited);
+        Assert.True(fake.Reaped);
+    }
+
+    [Fact]
+    public async Task ExportPdfAsync_KillFailsWhileProcessActive_SurfacesCleanupFailure()
+    {
+        var fake = new FakePdfExportProcess { KillException = new IOException("Access denied.") };
+        var exporter = new SlidevPdfExporter(_ => fake, TimeSpan.FromMinutes(1));
+        using var cancellation = new CancellationTokenSource();
+        var export = exporter.ExportPdfAsync(MakeProject(), "talk.pdf", cancellation.Token);
+        await fake.WaitStarted.Task;
+
+        cancellation.Cancel();
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => export);
+
+        Assert.Contains("may still be running", exception.Message);
+        Assert.IsType<IOException>(exception.InnerException);
+        Assert.False(fake.HasExited);
+        Assert.False(fake.Reaped);
+    }
+
+    private static PresentationProject MakeProject() => new()
+    {
+        Id = Guid.NewGuid(),
+        Name = "Test Talk",
+        SourceType = PresentationSourceType.LocalProject,
+        Location = Path.Combine(Path.GetTempPath(), "talk"),
+        SlidesFilePath = Path.Combine(Path.GetTempPath(), "talk", "slides.md")
+    };
+
+    private sealed class FakePdfExportProcess : IPdfExportProcess
+    {
+        private readonly TaskCompletionSource _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool HasExited { get; private set; }
+        public int ExitCode => 0;
+        public int KillCount { get; private set; }
+        public bool Reaped { get; private set; }
+        public Exception? KillException { get; init; }
+        public TaskCompletionSource WaitStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public void Start() { }
+        public void Kill(bool entireProcessTree)
+        {
+            Assert.True(entireProcessTree);
+            KillCount++;
+            if (KillException is not null)
+                throw KillException;
+            HasExited = true;
+            _exited.TrySetResult();
+        }
+        public Task<string> ReadStandardOutputAsync() => Task.FromResult(string.Empty);
+        public Task<string> ReadStandardErrorAsync() => Task.FromResult(string.Empty);
+        public async Task WaitForExitAsync(CancellationToken cancellationToken)
+        {
+            WaitStarted.TrySetResult();
+            await _exited.Task.WaitAsync(cancellationToken);
+            Reaped = true;
+        }
+        public void Dispose() { }
+    }
+
+    [Fact]
     public void CreateStartInfo_UsesSlidevPdfExportAndPreservesPathsWithSpaces()
     {
         var project = new PresentationProject

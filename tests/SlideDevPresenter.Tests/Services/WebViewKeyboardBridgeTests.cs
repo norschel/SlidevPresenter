@@ -104,4 +104,17 @@ public sealed class WebViewKeyboardBridgeTests
     {
         Assert.Equal(expected, WebViewKeyboardBridge.GetBlankState(body));
     }
+
+    [Theory]
+    [InlineData(true, false, "\"black\"")]
+    [InlineData(true, true, "\"white\"")]
+    [InlineData(false, false, "null")]
+    public void GetBlankStateScript_SetsExplicitIdempotentOverlayState(bool isBlanked, bool isWhite, string expectedState)
+    {
+        var script = WebViewKeyboardBridge.GetBlankStateScript(isBlanked, isWhite);
+
+        Assert.Equal($"window.__sdpSetBlankState?.({expectedState});", script);
+        Assert.Contains("window.__sdpSetBlankState=function(color)", WebViewKeyboardBridge.Script);
+        Assert.Contains("if(blankScreen){", WebViewKeyboardBridge.Script);
+    }
 }

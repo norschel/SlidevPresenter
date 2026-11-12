@@ -134,6 +134,43 @@ public class SourceScannerTests : IDisposable
         Assert.Equal(nested, results[0].Location);
     }
 
+    [Fact]
+    public void ScanRoot_ContinuesAfterChildDirectoryReadFailure()
+    {
+        var root = MakeDir("partial-scan");
+        var inaccessible = MakeDir("partial-scan", "unreadable");
+        var project = MakeDir("partial-scan", "readable", "talk");
+        File.WriteAllText(Path.Combine(project, "slides.md"), "# Talk");
+        var scanner = new SourceScanner(
+            NullLogger<SourceScanner>.Instance,
+            path => path == inaccessible
+                ? throw new UnauthorizedAccessException("Simulated inaccessible directory.")
+                : Directory.EnumerateDirectories(path),
+            File.GetAttributes);
+
+        var results = scanner.ScanRoot(root);
+
+        Assert.Equal(project, Assert.Single(results).Location);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    [InlineData("""{"scripts":"slidev"}""")]
+    [InlineData("""{"dependencies":[]}""")]
+    public void ScanRoot_StructurallyInvalidManifestDoesNotHideNeighborProject(string manifest)
+    {
+        var root = MakeDir("invalid-manifest-neighbor");
+        var invalidProject = MakeDir("invalid-manifest-neighbor", "not-a-deck");
+        File.WriteAllText(Path.Combine(invalidProject, "package.json"), manifest);
+        var validProject = MakeDir("invalid-manifest-neighbor", "valid-deck");
+        File.WriteAllText(Path.Combine(validProject, "slides.md"), "# Valid");
+
+        var results = _scanner.ScanRoot(root);
+
+        Assert.Equal(validProject, Assert.Single(results).Location);
+    }
+
     [Theory]
     [InlineData("node_modules")]
     [InlineData(".git")]
