@@ -2,6 +2,14 @@
 
 SlideDevPresenter is a cross-platform Avalonia desktop shell around [Slidev](https://sli.dev): it scans/clones slide-deck sources, builds and hosts the Slidev dev server, and drives presenter + participant windows across displays. See `README.md` for features and `docs/agent-spec.md` for scope and principles.
 
+## Shared repository rules for Copilot
+
+- Read existing repository conventions, tests, and architecture before making changes.
+- Never fabricate test output, tool results, performance metrics, or user feedback.
+- Avoid destructive operations, secret exposure, permission changes, deployment, merges, and pushes without explicit authorization.
+- Keep changes small and reviewable. Include validation commands and observed outcomes.
+- Human approval is required before merging, deploying, or changing production systems.
+
 ## Build & Test
 
 - Build: `dotnet build ./SlideDevPresenter.sln`
