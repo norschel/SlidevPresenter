@@ -98,9 +98,9 @@ public sealed class GitRepositoryService(string? cacheDirectory = null, string g
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(checkout)!);
                 if (string.IsNullOrEmpty(branch))
-                    await _gitClient.OpenTerminalAsync("clone", "--", remote, checkout);
+                    await _gitClient.OpenTerminalAsync("clone", "--", remote!, checkout);
                 else
-                    await _gitClient.OpenTerminalAsync("clone", "--branch", branch, "--", remote, checkout);
+                    await _gitClient.OpenTerminalAsync("clone", "--branch", branch, "--", remote!, checkout);
                 return new(null, $"Cloning {source.Name} in your terminal to {checkout}. Complete authentication there, then refresh the library. If cloning fails, fix it in that terminal and refresh.");
             }
 
