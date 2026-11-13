@@ -69,9 +69,11 @@
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsPresentationRibbonSelected}">
-                            <Button x:Name="StartFromBeginningButton" Content="▶ Start" Command="{Binding StartFromBeginningCommand}" ToolTip.Tip="Start presentation"/>
-                            <Button x:Name="StartFromCurrentButton" Content="Start Current" Command="{Binding StartFromCurrentSlideCommand}" ToolTip.Tip="Start from selected slide"/>
-                            <Button x:Name="StartPresenterViewButton" Content="Presenter View" Command="{Binding StartPresenterViewCommand}" ToolTip.Tip="Start presenter view"/>
+                            <Button Content="Previous" Click="Previous_Click" IsEnabled="{Binding IsRunning}" ToolTip.Tip="Previous presentation step"/>
+                            <Button Content="Next" Click="Next_Click" IsEnabled="{Binding IsRunning}" ToolTip.Tip="Next presentation step"/>
+                            <Button x:Name="StartFromBeginningButton" Content="▶ Start" Command="{Binding StartFromBeginningCommand}" IsEnabled="{Binding CanStartSelectedPresentation}" ToolTip.Tip="Start presentation"/>
+                            <Button x:Name="StartFromCurrentButton" Content="Start Current" Command="{Binding StartFromCurrentSlideCommand}" IsEnabled="{Binding CanStartSelectedPresentation}" ToolTip.Tip="Start from selected slide"/>
+                            <Button x:Name="StartPresenterViewButton" Content="Presenter View" Command="{Binding StartPresenterViewCommand}" IsEnabled="{Binding CanStartSelectedPresentation}" ToolTip.Tip="Start presenter view"/>
                             <Button Content="■ Stop" Command="{Binding StopCommand}" ToolTip.Tip="Stop presentation"/>
                             <Button Content="⇄ Swap Displays" Command="{Binding SwapDisplaysCommand}" ToolTip.Tip="Swap the participant view and the app between displays"/>
                             <Button Content="↻ Retry" Command="{Binding RetryCommand}" ToolTip.Tip="Retry presentation"/>

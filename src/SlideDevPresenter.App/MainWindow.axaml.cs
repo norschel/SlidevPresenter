@@ -721,6 +721,24 @@ public partial class MainWindow : Window
         TryHandleEscape(e);
     }
 
+    private void Previous_Click(object? sender, RoutedEventArgs e) => DispatchNavigationKey(Key.P);
+
+    private void Next_Click(object? sender, RoutedEventArgs e) => DispatchNavigationKey(Key.N);
+
+    private void DispatchNavigationKey(Key key)
+    {
+        if (_viewModel?.IsRunning != true)
+            return;
+
+        // Dispatch once through Slidev's keyboard handling, preserving incremental clicks and view sync.
+        if (_presentationWindowService?.IsParticipantWindowOpen == true)
+            _presentationWindowService.DispatchPresentationKey(key);
+        else if (!_embeddedWebViewsDisabledForSession && _viewModel.CanShowEmbeddedSurface)
+            _ = WebViewKeyboardBridge.DispatchKeyAsync(EmbeddedWebView, key, KeyModifiers.None, useFocusedElement: false);
+        else
+            _viewModel.ReportWebViewDiagnostic("Presentation navigation is unavailable without an embedded or participant view. Use the presentation's browser controls instead.");
+    }
+
     // Keys a native WebView already handled never reach here; Slidev syncs navigation to the presenter view.
     private bool TryForwardKeyToParticipant(KeyEventArgs e)
     {

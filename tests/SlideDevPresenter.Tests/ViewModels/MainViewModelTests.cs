@@ -706,6 +706,150 @@ public class MainViewModelTests
         Assert.Equal(1, host.StartCallCount);
     }
 
+    [Theory]
+    [InlineData("Launch", false)]
+    [InlineData("Beginning", false)]
+    [InlineData("Current", false)]
+    [InlineData("Presenter", false)]
+    [InlineData("Resume", false)]
+    [InlineData("Retry", false)]
+    [InlineData("Launch", true)]
+    [InlineData("Beginning", true)]
+    [InlineData("Current", true)]
+    [InlineData("Presenter", true)]
+    [InlineData("Resume", true)]
+    [InlineData("Retry", true)]
+    public async Task SuccessfulStart_FromEveryEntry_SelectsPresentationRibbonOnlyWhenRunning(string entry, bool hosted)
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(hosted
+            ? new PresentationProject
+            {
+                Id = Guid.NewGuid(), Name = "Hosted", SourceType = PresentationSourceType.HostedUrl,
+                Location = "https://slides.example.com/talk"
+            }
+            : MakeProject());
+
+        if (entry == "Resume")
+        {
+            await vm.LaunchAsync();
+            if (!hosted)
+                host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+            await vm.StopAsync();
+        }
+        else if (entry == "Retry")
+        {
+            vm.HostState = HostState.Error;
+        }
+
+        vm.SelectedRibbonTab = "Library";
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+        var command = entry switch
+        {
+            "Beginning" => vm.StartFromBeginningCommand,
+            "Current" => vm.StartFromCurrentSlideCommand,
+            "Presenter" => vm.StartPresenterViewCommand,
+            "Resume" => vm.ResumeCommand,
+            "Retry" => vm.RetryCommand,
+            _ => vm.LaunchCommand
+        };
+        Assert.True(command.CanExecute(null));
+        await command.ExecuteAsync(null);
+
+        if (!hosted)
+        {
+            Assert.True(vm.IsStarting);
+            Assert.Equal("Library", vm.SelectedRibbonTab);
+            host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+        }
+
+        Assert.True(vm.IsRunning);
+        Assert.Equal("Presentation", vm.SelectedRibbonTab);
+        Assert.True(vm.IsPresentationRibbonSelected);
+        Assert.Contains(nameof(MainViewModel.IsPresentationRibbonSelected), changed);
+        Assert.False(vm.CanStartSelectedPresentation);
+        await vm.StopAsync();
+    }
+
+    [Theory]
+    [InlineData("Launch")]
+    [InlineData("Beginning")]
+    [InlineData("Current")]
+    [InlineData("Presenter")]
+    [InlineData("Resume")]
+    [InlineData("Retry")]
+    public async Task FailedLocalStart_FromEveryEntry_DoesNotSelectPresentationRibbonOrReportRunning(string entry)
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        if (entry == "Resume")
+        {
+            await vm.LaunchAsync();
+            host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+            await vm.StopAsync();
+        }
+        else if (entry == "Retry")
+        {
+            host.SimulateError("Previous launch failed.");
+        }
+
+        vm.SelectedRibbonTab = "Home";
+        var command = entry switch
+        {
+            "Beginning" => vm.StartFromBeginningCommand,
+            "Current" => vm.StartFromCurrentSlideCommand,
+            "Presenter" => vm.StartPresenterViewCommand,
+            "Resume" => vm.ResumeCommand,
+            "Retry" => vm.RetryCommand,
+            _ => vm.LaunchCommand
+        };
+        Assert.True(command.CanExecute(null));
+        await command.ExecuteAsync(null);
+        host.SimulateError("Build failed.");
+
+        Assert.False(vm.IsRunning);
+        Assert.True(vm.IsError);
+        Assert.Equal("Build failed.", vm.ErrorMessage);
+        Assert.Equal("Home", vm.SelectedRibbonTab);
+        Assert.False(vm.IsPresentationRibbonSelected);
+    }
+
+    [Fact]
+    public async Task RunningStartVariants_PreserveProgrammaticNavigationWithoutForcingRibbonSelection()
+    {
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.LaunchAsync();
+        host.SimulateRunning("http://localhost:3030/", "http://localhost:3030/presenter/");
+        vm.SelectedRibbonTab = "View";
+        vm.SelectedOutlineSlide = new SlideDeckSlide(3, "Third slide", "");
+
+        Assert.False(vm.CanStartSelectedPresentation);
+        Assert.True(vm.StartFromCurrentSlideCommand.CanExecute(null));
+        await vm.StartFromCurrentSlideCommand.ExecuteAsync(null);
+        Assert.EndsWith("#/3", vm.ParticipantUrl);
+        Assert.EndsWith("#/3", vm.PresenterUrl);
+
+        Assert.True(vm.StartPresenterViewCommand.CanExecute(null));
+        await vm.StartPresenterViewCommand.ExecuteAsync(null);
+        Assert.Equal(PresentationSurfaceMode.Presenter, vm.SelectedSurfaceMode);
+
+        Assert.True(vm.StartFromBeginningCommand.CanExecute(null));
+        await vm.StartFromBeginningCommand.ExecuteAsync(null);
+        Assert.EndsWith("#/1", vm.ParticipantUrl);
+        Assert.EndsWith("#/1", vm.PresenterUrl);
+        Assert.Equal(1, host.StartCallCount);
+        Assert.Equal("View", vm.SelectedRibbonTab);
+
+        host.SimulateRunning(vm.ParticipantUrl!, vm.PresenterUrl!);
+        Assert.Equal("View", vm.SelectedRibbonTab);
+        await vm.StopAsync();
+    }
+
     [Fact]
     public async Task LaunchAsync_UsesDefaultPortFromSettings()
     {

@@ -5,6 +5,7 @@ SlideDevPresenter is a local desktop host for Slidev presentations. It provides 
 ## Presentation Features
 
 - Start a deck from the beginning, from the selected slide, or directly in Presenter View. Slidev remains a dev server so its presenter navigation stays synchronized with the participant view.
+- Successful starts open the Presentation ribbon. While running, ribbon start buttons are unavailable; use Previous and Next to navigate Slidev steps, including incremental clicks. External-browser-only sessions use the browser's presentation controls instead.
 - Show the participant window on another display, choose its target display, and swap the presenter and participant surfaces. App-side blank-screen controls are mirrored between the two views.
 - Use the slide thumbnails, agenda, and presentation timer panels alongside the embedded presentation.
 - Open links from a deck in embedded browser tabs or in the system browser, according to navigation settings. If embedded WebView access is denied, the app can fall back to the external browser for the session.

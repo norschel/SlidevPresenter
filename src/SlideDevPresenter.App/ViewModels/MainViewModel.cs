@@ -1075,6 +1075,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (state == HostState.Idle)
             SaveLastKnownPosition();
 
+        var isNewRunningSession = state == HostState.Running && !IsRunning;
         HostState = state;
         ParticipantUrl = participantUrl;
         PresenterUrl = presenterUrl;
@@ -1087,6 +1088,8 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (state == HostState.Running)
         {
+            if (isNewRunningSession)
+                SelectedRibbonTab = "Presentation";
             StartSessionTimer();
             if (ShouldOpenParticipantWindow(participantUrl))
                 _ = OpenParticipantWindowAsync(participantUrl!, presenterUrl);
