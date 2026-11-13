@@ -54,6 +54,23 @@ public static class WebViewKeyboardBridge
                 if(typeof invokeCSharpAction==='function')invokeCSharpAction(message);
                 else if(window.external&&window.external.invokeCSharpAction)window.external.invokeCSharpAction(message);
             }
+            function setBlankScreen(color,shouldNotify){
+                if(color===null){
+                    if(blankScreen){blankScreen.remove();blankScreen=null;}
+                    if(shouldNotify)notify('sdp:restore');
+                    return;
+                }
+                if(blankScreen){
+                    blankScreen.style.backgroundColor=color;
+                    return;
+                }
+                blankScreen=document.createElement('div');
+                blankScreen.style.cssText='position:fixed;inset:0;width:100%;height:100%;z-index:2147483647;pointer-events:auto;';
+                blankScreen.style.backgroundColor=color;
+                (document.fullscreenElement||document.body).appendChild(blankScreen);
+                if(shouldNotify)notify(color==='white'?'sdp:blank-white':'sdp:blank');
+            }
+            window.__sdpSetBlankState=function(color){setBlankScreen(color,false);};
             window.__sdpHandlePresentationKey=function(event){
                 function consume(){
                     event.preventDefault();
@@ -62,9 +79,7 @@ public static class WebViewKeyboardBridge
                 if(blankScreen){
                     consume();
                     if(event.repeat)return;
-                    blankScreen.remove();
-                    blankScreen=null;
-                    notify('sdp:restore');
+                    setBlankScreen(null,true);
                     return;
                 }
                 const target=event.target;
@@ -74,11 +89,7 @@ public static class WebViewKeyboardBridge
                 if(key==='.'||key==='b'||key==='w'){
                     consume();
                     if(event.repeat)return;
-                    blankScreen=document.createElement('div');
-                    blankScreen.style.cssText='position:fixed;inset:0;width:100%;height:100%;z-index:2147483647;pointer-events:auto;';
-                    blankScreen.style.backgroundColor=key==='w'?'white':'black';
-                    (document.fullscreenElement||document.body).appendChild(blankScreen);
-                    notify(key==='w'?'sdp:blank-white':'sdp:blank');
+                    setBlankScreen(key==='w'?'white':'black',true);
                 }else if(key==='n'||key==='p'){
                     consume();
                     const direction=key==='p'?'ArrowLeft':'ArrowRight';
@@ -93,6 +104,21 @@ public static class WebViewKeyboardBridge
             window.addEventListener('keydown',window.__sdpHandlePresentationKey,true);
         })();
         """ + EscapeScript;
+
+    public static string GetBlankStateScript(bool isBlanked, bool isWhite) =>
+        "window.__sdpSetBlankState?.(" + (isBlanked ? JsonSerializer.Serialize(isWhite ? "white" : "black") : "null") + ");";
+
+    public static async Task SetBlankStateAsync(NativeWebView webView, bool isBlanked, bool isWhite)
+    {
+        try
+        {
+            await webView.InvokeScript(Script + GetBlankStateScript(isBlanked, isWhite));
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceError($"Could not synchronize presentation blank state: {exception}");
+        }
+    }
 
     public static bool ShouldHandleKey(Key key, KeyModifiers modifiers, bool isBlanked) =>
         isBlanked || ((modifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) == 0

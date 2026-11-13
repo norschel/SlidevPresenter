@@ -35,6 +35,7 @@ public sealed class SettingsService : ISettingsService
 
     private readonly string _settingsFilePath;
     private readonly ILogger<SettingsService> _logger;
+    private readonly Func<Stream, AppSettings, CancellationToken, Task> _serializeSettings;
 
     public AppSettings Settings { get; private set; } = new();
 
@@ -42,9 +43,16 @@ public sealed class SettingsService : ISettingsService
         : this(logger, GetDefaultSettingsPath()) { }
 
     internal SettingsService(ILogger<SettingsService> logger, string settingsFilePath)
+        : this(logger, settingsFilePath, SerializeSettingsAsync) { }
+
+    internal SettingsService(
+        ILogger<SettingsService> logger,
+        string settingsFilePath,
+        Func<Stream, AppSettings, CancellationToken, Task> serializeSettings)
     {
         _logger = logger;
         _settingsFilePath = settingsFilePath;
+        _serializeSettings = serializeSettings;
     }
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
@@ -136,10 +144,30 @@ public sealed class SettingsService : ISettingsService
 
         Directory.CreateDirectory(dir);
 
-        await using var stream = File.Open(_settingsFilePath, FileMode.Create, FileAccess.Write);
-        await JsonSerializer.SerializeAsync(stream, settings, JsonOptions, cancellationToken);
-        _logger.LogInformation("Settings saved to {Path}.", _settingsFilePath);
+        var temporaryPath = Path.Combine(dir, $".{Path.GetFileName(_settingsFilePath)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                             4096, FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                await _serializeSettings(stream, settings, cancellationToken);
+                await stream.FlushAsync(cancellationToken);
+                stream.Flush(flushToDisk: true);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(temporaryPath, _settingsFilePath, overwrite: true);
+            _logger.LogInformation("Settings saved to {Path}.", _settingsFilePath);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+        }
     }
+
+    private static Task SerializeSettingsAsync(Stream stream, AppSettings settings, CancellationToken cancellationToken) =>
+        JsonSerializer.SerializeAsync(stream, settings, JsonOptions, cancellationToken);
 
     private static string GetDefaultSettingsPath()
     {

@@ -12,11 +12,13 @@ public sealed class PresentationWindowService : IPresentationWindowService
 {
     private readonly IDisplayService _displayService;
     private readonly ISettingsService _settingsService;
+    private readonly ParticipantBlankState _blankState = new();
     private ParticipantWindow? _participantWindow;
     private (PixelPoint Position, WindowState State)? _mainWindowOrigin;
 
     public event EventHandler? PresentationExited;
     public event EventHandler<Uri>? ExternalLinkNavigated;
+    public event EventHandler<PresentationBlankStateChangedEventArgs>? BlankStateChanged;
 
     public PresentationWindowService(IDisplayService displayService, ISettingsService settingsService)
     {
@@ -35,6 +37,7 @@ public sealed class PresentationWindowService : IPresentationWindowService
         Dispatcher.UIThread.Post(() =>
         {
             CloseOnUiThread();
+            _blankState.Set(false, false);
             RestoreMainWindowPosition();
         });
         return Task.CompletedTask;
@@ -43,6 +46,12 @@ public sealed class PresentationWindowService : IPresentationWindowService
     public bool IsParticipantWindowOpen => _participantWindow is not null;
 
     public void DispatchPresentationKey(Avalonia.Input.Key key) => _participantWindow?.DispatchPresentationKey(key);
+
+    public void SetBlankState(bool isBlanked, bool isWhite)
+    {
+        _blankState.Set(isBlanked, isWhite);
+        _participantWindow?.SetBlankState(_blankState.IsBlanked, _blankState.IsWhite);
+    }
 
     public Task SwapDisplaysAsync(CancellationToken cancellationToken = default)
     {
@@ -105,9 +114,13 @@ public sealed class PresentationWindowService : IPresentationWindowService
 
         var settings = _settingsService.Settings.DisplayManagement;
 
-        _participantWindow = new ParticipantWindow(participantUrl);
+        _participantWindow = new ParticipantWindow(
+            participantUrl,
+            navigationSettings: _settingsService.Settings.Navigation);
+        _blankState.Replay(_participantWindow.SetBlankState);
         _participantWindow.PresentationExited += OnParticipantWindowExited;
         _participantWindow.ExternalLinkNavigated += OnParticipantWindowExternalLinkNavigated;
+        _participantWindow.BlankStateChanged += OnParticipantWindowBlankStateChanged;
         _participantWindow.Closed += OnParticipantWindowClosed;
 
         var display = targetDisplay ?? PickDefaultDisplay(settings);
@@ -196,6 +209,7 @@ public sealed class PresentationWindowService : IPresentationWindowService
         // does not treat the programmatic close as a user-initiated close.
         _participantWindow.PresentationExited -= OnParticipantWindowExited;
         _participantWindow.ExternalLinkNavigated -= OnParticipantWindowExternalLinkNavigated;
+        _participantWindow.BlankStateChanged -= OnParticipantWindowBlankStateChanged;
         _participantWindow.Closed -= OnParticipantWindowClosed;
         _participantWindow.Close();
         _participantWindow = null;
@@ -225,5 +239,12 @@ public sealed class PresentationWindowService : IPresentationWindowService
     private void OnParticipantWindowExternalLinkNavigated(object? sender, Uri uri)
     {
         ExternalLinkNavigated?.Invoke(this, uri);
+    }
+
+    private void OnParticipantWindowBlankStateChanged(object? sender, PresentationBlankStateChangedEventArgs e)
+    {
+        _blankState.Set(e.IsBlanked, e.IsWhite);
+        BlankStateChanged?.Invoke(this, new PresentationBlankStateChangedEventArgs(
+            _blankState.IsBlanked, _blankState.IsWhite));
     }
 }

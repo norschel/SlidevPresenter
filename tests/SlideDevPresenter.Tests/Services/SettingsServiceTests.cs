@@ -7,6 +7,60 @@ namespace SlideDevPresenter.Tests.Services;
 
 public sealed class SettingsServiceTests
 {
+    [Fact]
+    public async Task SaveAsync_PreCanceled_PreservesExistingSettingsFile()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"SlideDevPresenter-settings-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "settings.json");
+        const string previous = "{\"previous\":true}";
+        await File.WriteAllTextAsync(path, previous);
+
+        try
+        {
+            var service = new SettingsService(NullLogger<SettingsService>.Instance, path);
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.SaveAsync(cancellation.Token));
+
+            Assert.Equal(previous, await File.ReadAllTextAsync(path));
+            Assert.Equal("settings.json", Assert.Single(Directory.GetFiles(directory)).Split(Path.DirectorySeparatorChar).Last());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SaveAsync_WriteFailure_PreservesExistingSettingsFile()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"SlideDevPresenter-settings-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "settings.json");
+        const string previous = "{\"previous\":true}";
+        await File.WriteAllTextAsync(path, previous);
+
+        try
+        {
+            var service = new SettingsService(
+                NullLogger<SettingsService>.Instance,
+                path,
+                (_, _, _) => Task.FromException(new IOException("Simulated serialization failure.")));
+
+            var error = await Assert.ThrowsAsync<IOException>(() => service.SaveAsync());
+
+            Assert.Equal("Simulated serialization failure.", error.Message);
+            Assert.Equal(previous, await File.ReadAllTextAsync(path));
+            Assert.Equal("settings.json", Assert.Single(Directory.GetFiles(directory)).Split(Path.DirectorySeparatorChar).Last());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData(PresentationSourceType.LocalRoot, false)]
     [InlineData(PresentationSourceType.LocalProject, false)]
