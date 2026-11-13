@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using SlideDevPresenter.App.Services;
 using SlideDevPresenter.Core.Models;
@@ -60,7 +61,37 @@ public partial class ParticipantWindow : Window
     public void SetFullscreen()
     {
         _isFullscreenRequested = true;
+
+        // macOS keeps a borderless window's size in fullscreen and letterboxes it with black, so size it to the screen first.
+        if (OperatingSystem.IsMacOS())
+            FitToScreen();
+
         WindowState = WindowState.FullScreen;
+
+        // macOS may push the window below the notch after the fullscreen animation; trim the overflow once it has settled.
+        if (OperatingSystem.IsMacOS())
+            DispatcherTimer.RunOnce(ClipToScreen, TimeSpan.FromMilliseconds(900));
+    }
+
+    private Screen? CurrentScreen() => Screens.ScreenFromPoint(Position) ?? Screens.ScreenFromWindow(this);
+
+    private void FitToScreen()
+    {
+        if (CurrentScreen() is not { } screen)
+            return;
+
+        var size = FullscreenWindowSizer.GetScreenSize(screen.Bounds, screen.Scaling);
+        Width = size.Width;
+        Height = size.Height;
+    }
+
+    private void ClipToScreen()
+    {
+        if (!_isFullscreenRequested || !IsVisible || WindowState != WindowState.FullScreen || CurrentScreen() is not { } screen)
+            return;
+
+        if (FullscreenWindowSizer.GetClippedHeight(screen.Bounds, Position, Height, screen.Scaling) is { } height)
+            Height = height;
     }
 
     /// <summary>Moves the window to <paramref name="position"/> without treating the fullscreen exit as a user exit.</summary>
