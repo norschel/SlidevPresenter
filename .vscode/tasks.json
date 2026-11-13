@@ -9,7 +9,28 @@
 				"build",
 				"./SlideDevPresenter.sln"
 			],
+			"options": {
+				"env": {
+					"DOTNET_ROLL_FORWARD": "Major"
+				}
+			},
 			"group": "build",
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "Test Solution",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"test",
+				"./SlideDevPresenter.sln"
+			],
+			"options": {
+				"env": {
+					"DOTNET_ROLL_FORWARD": "Major"
+				}
+			},
+			"group": "test",
 			"problemMatcher": "$msCompile"
 		},
 		{
@@ -22,6 +43,11 @@
 				"-c",
 				"Debug"
 			],
+			"options": {
+				"env": {
+					"DOTNET_ROLL_FORWARD": "Major"
+				}
+			},
 			"group": "build",
 			"problemMatcher": "$msCompile"
 		},
@@ -36,6 +62,11 @@
 				"-c",
 				"Debug"
 			],
+			"options": {
+				"env": {
+					"DOTNET_ROLL_FORWARD": "Major"
+				}
+			},
 			"group": {
 				"kind": "none",
 				"isDefault": false
@@ -65,6 +96,11 @@
 				"Debug",
 				"--no-build"
 			],
+			"options": {
+				"env": {
+					"DOTNET_ROLL_FORWARD": "Major"
+				}
+			},
 			"group": {
 				"kind": "none",
 				"isDefault": false

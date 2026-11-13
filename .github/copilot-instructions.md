@@ -16,6 +16,8 @@ SlideDevPresenter is a cross-platform Avalonia desktop shell around [Slidev](htt
 - Test: `dotnet test ./SlideDevPresenter.sln` (xUnit; CI runs Release config on `ubuntu-latest`, see `.github/workflows/verify-build.yml`)
 - Run app: `dotnet run --project ./src/SlideDevPresenter.App/SlideDevPresenter.App.csproj`
 - Target framework is `net10.0` for all projects. Avalonia 12.x, CommunityToolkit.Mvvm 8.x, Microsoft.Extensions.Logging 10.x.
+- The app remains targeted at `net10.0` and sets `<RollForward>Major</RollForward>` so framework-dependent local launches can use a newer installed runtime when .NET 10 isn't installed. Don't retarget only to match a developer machine's installed runtime; release packages are self-contained and bundle the runtime selected at publish time.
+- If only .NET 11 is installed, the `net10.0` test host needs major roll-forward too: run `DOTNET_ROLL_FORWARD=Major dotnet test ./SlideDevPresenter.sln` (PowerShell: `$env:DOTNET_ROLL_FORWARD = "Major"; dotnet test ./SlideDevPresenter.sln`).
 - Always build and run the tests after making code changes; fix new warnings you introduce.
 
 ## Project Layout
