@@ -100,7 +100,7 @@ public sealed class SlideDeckBuilder : ISlideDeckBuilder
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var slidesRelativePath = Path.GetRelativePath(directory, slidesPath);
-        var files = new List<string>();
+        var files = new List<(string RelativePath, string FullPath)>();
         var root = ResolveDirectory(directory) ?? Path.TrimEndingDirectorySeparator(directory);
         var visited = new HashSet<string>(PathComparer) { root };
         var pending = new Stack<(string Path, string Resolved)>([(root, root)]);
@@ -109,28 +109,31 @@ public sealed class SlideDeckBuilder : ISlideDeckBuilder
         {
             cancellationToken.ThrowIfCancellationRequested();
             var (current, resolved) = pending.Pop();
-            files.AddRange(Directory.EnumerateFiles(current));
-            foreach (var child in Directory.EnumerateDirectories(current))
+            files.AddRange(Directory.EnumerateFiles(resolved)
+                .Select(file => (Path.Combine(current, Path.GetRelativePath(resolved, file)), file)));
+            foreach (var child in Directory.EnumerateDirectories(resolved))
             {
                 var name = Path.GetFileName(child);
                 if (ExcludedSourceDirectories.Contains(name) || (current == root && ExcludedRootDirectories.Contains(name)))
                     continue;
                 // Directory links may point back to the deck or an ancestor; follow each resolved target only once.
                 var linkTarget = new DirectoryInfo(child).LinkTarget;
-                var target = ResolveDirectory(Path.Combine(resolved, name));
+                var target = ResolveDirectory(child);
+                var logicalPath = Path.Combine(current, Path.GetRelativePath(resolved, child));
                 if (linkTarget is not null)
-                    links.Add($"{Path.GetRelativePath(root, child)}|{linkTarget}\n");
+                    links.Add($"{Path.GetRelativePath(root, logicalPath)}|{linkTarget}\n");
                 if (target is not null && visited.Add(target))
-                    pending.Push((child, target));
+                    pending.Push((logicalPath, target));
             }
         }
         hash.AppendData(Encoding.UTF8.GetBytes(slidesRelativePath + "\n"));
         foreach (var link in links.Order(StringComparer.Ordinal))
             hash.AppendData(Encoding.UTF8.GetBytes(link));
-        foreach (var file in files.Select(file => Path.GetRelativePath(root, file)).Order(StringComparer.Ordinal))
+        foreach (var file in files.OrderBy(file => file.RelativePath, StringComparer.Ordinal))
         {
-            var info = new FileInfo(Path.Combine(root, file));
-            hash.AppendData(Encoding.UTF8.GetBytes($"{file}|{info.Length}|{info.LastWriteTimeUtc.Ticks}\n"));
+            var relativePath = Path.GetRelativePath(root, file.RelativePath);
+            var info = new FileInfo(file.FullPath);
+            hash.AppendData(Encoding.UTF8.GetBytes($"{relativePath}|{info.Length}|{info.LastWriteTimeUtc.Ticks}\n"));
         }
         return Convert.ToHexString(hash.GetHashAndReset());
     }
