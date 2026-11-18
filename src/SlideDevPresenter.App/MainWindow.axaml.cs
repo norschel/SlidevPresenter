@@ -72,6 +72,8 @@ public partial class MainWindow : Window
         _navigationPolicy = navigationPolicy ?? new WebViewNavigationPolicy();
         DataContext = viewModel;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        // Decks are typically edited in another app (e.g. VS Code), so re-check the build status on return.
+        Activated += (_, _) => _ = viewModel.RefreshBuildStatusAsync();
         InitializeComponent();
         ConfigureEmbeddedWebView();
         ConfigureBrowserWebView();

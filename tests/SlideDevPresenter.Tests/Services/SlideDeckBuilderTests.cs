@@ -138,6 +138,66 @@ public sealed class SlideDeckBuilderTests : IDisposable
     }
 
     [Fact]
+    public async Task IsBuildRequiredAsync_NestedDistFolder_CountsAsSource()
+    {
+        Directory.CreateDirectory(Path.Combine(_directory, "public", "dist"));
+        File.WriteAllText(Path.Combine(_directory, "public", "dist", "logo.svg"), "<svg/>");
+        await _builder.BuildAsync(Project());
+
+        File.WriteAllText(Path.Combine(_directory, "public", "dist", "logo.svg"), "<svg width=\"10\"/>");
+
+        Assert.True(await _builder.IsBuildRequiredAsync(Project()));
+    }
+
+    [Fact]
+    public async Task IsBuildRequiredAsync_DirectorySymlinkCycle_DoesNotLoop()
+    {
+        if (!TryCreateDirectoryLink(Path.Combine(_directory, "loop"), _directory))
+            return;
+
+        await _builder.BuildAsync(Project());
+
+        Assert.False(await _builder.IsBuildRequiredAsync(Project()));
+    }
+
+    [Fact]
+    public async Task IsBuildRequiredAsync_LinkedSourceEdited_RequiresBuild()
+    {
+        var shared = Path.Combine(Path.GetTempPath(), "presenter-shared-" + Guid.NewGuid());
+        Directory.CreateDirectory(shared);
+        try
+        {
+            File.WriteAllText(Path.Combine(shared, "theme.css"), "a {}");
+            if (!TryCreateDirectoryLink(Path.Combine(_directory, "shared"), shared))
+                return;
+            await _builder.BuildAsync(Project());
+
+            File.WriteAllText(Path.Combine(shared, "theme.css"), "a { color: red; }");
+
+            Assert.True(await _builder.IsBuildRequiredAsync(Project()));
+        }
+        finally
+        {
+            Directory.Delete(shared, true);
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_ReinstallFails_InvalidatesMarkers()
+    {
+        await _builder.BuildAsync(Project());
+        var cli = SlideDeckBuilder.GetCliPath(_directory);
+        File.Delete(cli);
+        _exitCode = 1;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _builder.BuildAsync(Project()));
+        // The failed installer may still have restored the CLI.
+        File.WriteAllText(cli, "");
+        _exitCode = 0;
+
+        Assert.True(await _builder.IsBuildRequiredAsync(Project()));
+    }
+
+    [Fact]
     public async Task IsBuildRequiredAsync_OutputMissing_RequiresBuild()
     {
         await _builder.BuildAsync(Project());
@@ -171,6 +231,20 @@ public sealed class SlideDeckBuilderTests : IDisposable
         Id = Guid.NewGuid(), Name = "Talk", SourceType = PresentationSourceType.LocalProject,
         Location = _directory, SlidesFilePath = Path.Combine(_directory, "slides.md")
     };
+
+    // Windows only allows creating symbolic links with Developer Mode or elevation.
+    private static bool TryCreateDirectoryLink(string path, string target)
+    {
+        try
+        {
+            Directory.CreateSymbolicLink(path, target);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 
     private static string CommandText(ProcessStartInfo info) => info.FileName == "powershell.exe"
         ? System.Text.Encoding.Unicode.GetString(Convert.FromBase64String(info.ArgumentList[^1]))

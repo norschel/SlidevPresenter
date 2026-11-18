@@ -49,6 +49,7 @@
                                 <TextBlock Text="{Binding BuildStatusText}" VerticalAlignment="Center" Opacity="0.7"/>
                             </StackPanel>
                             <Button Content="■ Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsPresentationActive}" ToolTip.Tip="Stop presentation"/>
+                            <Button Content="■ Cancel Build" Command="{Binding StopCommand}" IsVisible="{Binding IsBuilding}" ToolTip.Tip="Cancel the running dependency installation or build"/>
                             <Button Content="↻ Retry" Command="{Binding RetryCommand}" IsVisible="{Binding IsError}" ToolTip.Tip="Retry presentation"/>
                         </StackPanel>
 
@@ -59,6 +60,7 @@
                             <Button Content="Export Library..." Click="ExportLibrary_Click" ToolTip.Tip="Save the hosted presentations in your library as a shareable JSON file"/>
                             <Button Content="Export PDF" Click="ExportPdf_Click" IsEnabled="{Binding CanExportPdf}" ToolTip.Tip="Export the selected local Slidev deck as a PDF"/>
                             <Button Content="⚙ Build" Command="{Binding BuildCommand}" ToolTip.Tip="Compile the selected local Slidev deck now, even if no changes were detected"/>
+                            <Button Content="■ Cancel Build" Command="{Binding StopCommand}" IsVisible="{Binding IsBuilding}" ToolTip.Tip="Cancel the running dependency installation or build"/>
                             <TextBlock Text="{Binding DeckTitle}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="12,0,0,0"/>
                             <TextBlock Text="{Binding SlideCount, StringFormat='Slides: {0}'}" VerticalAlignment="Center" Opacity="0.7"/>
                         </StackPanel>
@@ -107,13 +109,26 @@
             </StackPanel>
         </Border>
 
-        <Border Grid.Row="2" Grid.ColumnSpan="2" Background="{DynamicResource AppChromeBrush}" Padding="8"
-                IsVisible="{Binding WebViewDiagnostic, Converter={x:Static ObjectConverters.IsNotNull}}">
-            <DockPanel LastChildFill="True">
-                <Button DockPanel.Dock="Right" Content="Dismiss" Command="{Binding DismissWebViewDiagnosticCommand}" VerticalAlignment="Center"/>
-                <TextBlock Text="{Binding WebViewDiagnostic}" TextWrapping="Wrap" VerticalAlignment="Center"/>
-            </DockPanel>
-        </Border>
+        <StackPanel Grid.Row="2" Grid.ColumnSpan="2">
+            <Border Background="{DynamicResource AppChromeBrush}" Padding="8"
+                    IsVisible="{Binding WebViewDiagnostic, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <DockPanel LastChildFill="True">
+                    <Button DockPanel.Dock="Right" Content="Dismiss" Command="{Binding DismissWebViewDiagnosticCommand}" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding WebViewDiagnostic}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                </DockPanel>
+            </Border>
+
+            <Border Background="{DynamicResource AppChromeBrush}" Padding="8"
+                    IsVisible="{Binding BuildErrorDetails, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <DockPanel LastChildFill="True">
+                    <Button DockPanel.Dock="Right" Content="Dismiss" Command="{Binding DismissBuildErrorCommand}" VerticalAlignment="Top" Margin="8,0,0,0"/>
+                    <TextBlock DockPanel.Dock="Top" Text="Build failed" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                    <ScrollViewer MaxHeight="200" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <SelectableTextBlock Text="{Binding BuildErrorDetails}" TextWrapping="Wrap"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </StackPanel>
 
         <Border Grid.Row="3" Grid.Column="0" Width="320" Background="{DynamicResource AppSidebarBrush}" Padding="12" IsVisible="{Binding IsLibrarySidebarVisible}">
             <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">

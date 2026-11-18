@@ -10,7 +10,11 @@ namespace SlideDevPresenter.Infrastructure.Services;
 
 public sealed class SlideDeckBuilder : ISlideDeckBuilder
 {
-    private static readonly HashSet<string> ExcludedSourceDirectories = new(StringComparer.OrdinalIgnoreCase) { "node_modules", ".git", "dist", ".slidev" };
+    private static readonly HashSet<string> ExcludedSourceDirectories = new(StringComparer.OrdinalIgnoreCase) { "node_modules", ".git" };
+    // Build output and Slidev caches are only excluded at the project root so nested folders such as public/dist still count as sources.
+    private static readonly HashSet<string> ExcludedRootDirectories = new(StringComparer.OrdinalIgnoreCase) { "dist", ".slidev" };
+    private static readonly StringComparer PathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+    private const int MaxLinkHops = 32;
     private const string BuildMarkerName = ".slidev-presenter-build";
     private static readonly string[] ManifestFiles = ["package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb", ".npmrc", ".yarnrc.yml"];
     private readonly Func<ProcessStartInfo, CancellationToken, Task<(int ExitCode, string Output)>> _run;
@@ -64,6 +68,9 @@ public sealed class SlideDeckBuilder : ISlideDeckBuilder
                 "yarn" when File.Exists(Path.Combine(directory, ".yarnrc.yml")) => ["install", "--immutable"],
                 _ => new[] { "install", "--frozen-lockfile" }
             };
+            // Invalidate both markers first so a failed reinstall can never leave stale markers that skip the next build.
+            DeleteIfExists(marker);
+            DeleteIfExists(GetBuildMarkerPath(directory));
             await ExecuteAsync(CreateStartInfo(manager, directory, arguments), "Dependency installation", cancellationToken);
             if (!File.Exists(cli))
                 throw new InvalidOperationException($"Slidev CLI is missing after dependency installation in {directory}. Add @slidev/cli to the project and install dependencies manually, then retry.");
@@ -94,16 +101,22 @@ public sealed class SlideDeckBuilder : ISlideDeckBuilder
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         hash.AppendData(Encoding.UTF8.GetBytes(Path.GetRelativePath(directory, slidesPath) + "\n"));
         var files = new List<string>();
-        var pending = new Stack<string>([directory]);
+        var root = Path.TrimEndingDirectorySeparator(directory);
+        var visited = new HashSet<string>(PathComparer) { root };
+        var pending = new Stack<(string Path, string Resolved)>([(root, root)]);
         while (pending.Count > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var current = pending.Pop();
+            var (current, resolved) = pending.Pop();
             files.AddRange(Directory.EnumerateFiles(current));
-            foreach (var child in Directory.EnumerateDirectories(current)
-                .Where(child => !ExcludedSourceDirectories.Contains(Path.GetFileName(child))))
+            foreach (var child in Directory.EnumerateDirectories(current))
             {
-                pending.Push(child);
+                var name = Path.GetFileName(child);
+                if (ExcludedSourceDirectories.Contains(name) || (current == root && ExcludedRootDirectories.Contains(name)))
+                    continue;
+                // Directory links may point back to the deck or an ancestor; follow each resolved target only once.
+                if (ResolveDirectory(Path.Combine(resolved, name)) is { } target && visited.Add(target))
+                    pending.Push((child, target));
             }
         }
         foreach (var file in files.Select(file => Path.GetRelativePath(directory, file)).Order(StringComparer.Ordinal))
@@ -112,6 +125,24 @@ public sealed class SlideDeckBuilder : ISlideDeckBuilder
             hash.AppendData(Encoding.UTF8.GetBytes($"{file}|{info.Length}|{info.LastWriteTimeUtc.Ticks}\n"));
         }
         return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    private static void DeleteIfExists(string path)
+    {
+        if (File.Exists(path))
+            File.Delete(path);
+    }
+
+    private static string? ResolveDirectory(string path)
+    {
+        for (var hop = 0; hop < MaxLinkHops; hop++)
+        {
+            var target = new DirectoryInfo(path).LinkTarget;
+            if (target is null)
+                return path;
+            path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(target, Path.GetDirectoryName(path)!));
+        }
+        return null;
     }
 
     internal static string GetCliPath(string directory) => Path.Combine(directory, "node_modules", "@slidev", "cli", "bin", "slidev.mjs");
