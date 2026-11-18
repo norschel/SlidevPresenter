@@ -61,7 +61,7 @@ Namespaces mirror folder paths (`SlideDevPresenter.Core.Models`, `SlideDevPresen
 
 - Source types (`PresentationSourceType`): `LocalRoot`, `LocalProject`, `HostedUrl`, `Git`, `GitHub`. In the library JSON they serialize as `git` / `github-repository`; a legacy `github` JSON type is a `HostedUrl`. Checkout paths are derived, never persisted.
 - `GitRepositoryService` prepares/reuses clones and switches branches through `IGitCliClient`; local sources inside a Git work tree get branch selection without fetch/pull. Refresh is blocked while a presentation is running.
-- `SlideDeckBuilder` installs dependencies based on the lockfile/`packageManager`, hashes manifests to skip redundant installs, then runs the local `@slidev/cli` build before `SlidevProcessHost` starts the dev server. `SourceScanner` must keep excluding `node_modules`, `.git`, and `dist`.
+- `SlideDeckBuilder` installs dependencies based on the lockfile/`packageManager`, hashes manifests to skip redundant installs, and fingerprints deck sources (marker `node_modules/.slidev-presenter-build`) so `SlidevProcessHost` only runs the local `@slidev/cli` build when something changed (`BuildIfRequiredAsync`); `MainViewModel.BuildCommand` always builds. `SourceScanner` must keep excluding `node_modules`, `.git`, and `dist`.
 - Slidev runs as a dev server so navigation syncs between presenter and participant; the injected blank overlay (`b`/`w`/`.`) is app-side and must be mirrored explicitly.
 
 ## Platform-Specific Behavior

@@ -12,6 +12,7 @@ public sealed class ApplicationMenuCommands
     public required ICommand OpenDeckLocation { get; init; }
     public required ICommand CopyDeckLocation { get; init; }
     public required ICommand OpenInVsCode { get; init; }
+    public required ICommand BuildDeck { get; init; }
     public required ICommand ExportPdf { get; init; }
     public required ICommand RemoveFromLibrary { get; init; }
 

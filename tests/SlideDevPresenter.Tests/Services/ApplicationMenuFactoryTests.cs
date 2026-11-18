@@ -19,7 +19,7 @@ public sealed class ApplicationMenuFactoryTests
     }
 
     [Theory]
-    [InlineData("File", "Refresh Library|Import Library…|Export Library…|-|Open Deck Location|Copy Deck Location|Open in VS Code|Export PDF…|-|Remove from Library")]
+    [InlineData("File", "Refresh Library|Import Library…|Export Library…|-|Open Deck Location|Copy Deck Location|Open in VS Code|Build Deck|Export PDF…|-|Remove from Library")]
     [InlineData("Presentation", "Start from Beginning|Start from Current Slide|Start Presenter View|-|Resume|Stop Presentation|Retry|-|Swap Displays|Detect Displays")]
     [InlineData("View", "Home Tab|Library Tab|View Tab|Presentation Tab|Browser Tab|-|Presenter View|Participant View|-|Thumbnails Panel|Agenda Panel|Timer Panel|Restore Chrome|-|Open Current View in Browser|Open Presenter in Browser|Open Participant in Browser")]
     [InlineData("Window", "Minimize|Zoom")]
@@ -40,6 +40,7 @@ public sealed class ApplicationMenuFactoryTests
     [InlineData("File", "Open Deck Location", nameof(ApplicationMenuCommands.OpenDeckLocation))]
     [InlineData("File", "Copy Deck Location", nameof(ApplicationMenuCommands.CopyDeckLocation))]
     [InlineData("File", "Open in VS Code", nameof(ApplicationMenuCommands.OpenInVsCode))]
+    [InlineData("File", "Build Deck", nameof(ApplicationMenuCommands.BuildDeck))]
     [InlineData("File", "Export PDF…", nameof(ApplicationMenuCommands.ExportPdf))]
     [InlineData("File", "Remove from Library", nameof(ApplicationMenuCommands.RemoveFromLibrary))]
     [InlineData("Presentation", "Start from Beginning", nameof(ApplicationMenuCommands.StartFromBeginning))]
@@ -349,6 +350,7 @@ public sealed class ApplicationMenuFactoryTests
             OpenDeckLocation = Cmd(nameof(ApplicationMenuCommands.OpenDeckLocation)),
             CopyDeckLocation = Cmd(nameof(ApplicationMenuCommands.CopyDeckLocation)),
             OpenInVsCode = Cmd(nameof(ApplicationMenuCommands.OpenInVsCode)),
+            BuildDeck = Cmd(nameof(ApplicationMenuCommands.BuildDeck)),
             ExportPdf = exportPdf ?? Cmd(nameof(ApplicationMenuCommands.ExportPdf)),
             RemoveFromLibrary = Cmd(nameof(ApplicationMenuCommands.RemoveFromLibrary)),
             StartFromBeginning = Cmd(nameof(ApplicationMenuCommands.StartFromBeginning)),

@@ -39,7 +39,8 @@ public partial class App : Application
 
             _settingsService = new SettingsService(loggerFactory.CreateLogger<SettingsService>());
             var sourceScanner = new SourceScanner(loggerFactory.CreateLogger<SourceScanner>());
-            var processHost = new SlidevProcessHost(loggerFactory.CreateLogger<SlidevProcessHost>());
+            var slideDeckBuilder = new SlideDeckBuilder();
+            var processHost = new SlidevProcessHost(loggerFactory.CreateLogger<SlidevProcessHost>(), slideDeckBuilder);
             var slideDeckMetadataReader = new SlideDeckMetadataReader(loggerFactory.CreateLogger<SlideDeckMetadataReader>());
             var displayService = new AvaloniaDisplayService();
             var presentationWindowService = new PresentationWindowService(displayService, _settingsService);
@@ -48,7 +49,7 @@ public partial class App : Application
 
             Dispatcher.UIThread.UnhandledException += OnUiThreadUnhandledException;
 
-            _mainViewModel = new MainViewModel(_settingsService, sourceScanner, processHost, slideDeckMetadataReader, presentationWindowService, displayService, displaySelector: new AvaloniaDisplaySelector(), browserLauncher: new ExternalBrowserLauncher());
+            _mainViewModel = new MainViewModel(_settingsService, sourceScanner, processHost, slideDeckMetadataReader, presentationWindowService, displayService, displaySelector: new AvaloniaDisplaySelector(), browserLauncher: new ExternalBrowserLauncher(), slideDeckBuilder: slideDeckBuilder);
             _mainWindow = new MainWindow(_mainViewModel, shortcutService, themeService, presentationWindowService: presentationWindowService);
 
             presentationWindowService.PresentationExited += (_, _) => _mainWindow.Activate();

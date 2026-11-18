@@ -21,6 +21,9 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly IDisplayService _displayService;
     private readonly IDisplaySelector _displaySelector;
     private readonly ISlideDeckPdfExporter _slideDeckPdfExporter;
+    private readonly ISlideDeckBuilder _slideDeckBuilder;
+    private CancellationTokenSource? _buildCancellation;
+    private int _buildStatusVersion;
     private readonly IGitRepositoryService _gitRepositoryService;
     private int _branchLoadVersion;
     private readonly ICodeEditorService _codeEditorService;
@@ -75,7 +78,27 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
     [NotifyCanExecuteChangedFor(nameof(RemoveSelectedProjectFromLibraryCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenSelectedProjectLocationCommand))]
+    [NotifyCanExecuteChangedFor(nameof(BuildCommand))]
     private PresentationProjectViewModel? _selectedProject;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(BuildCommand))]
+    [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartFromBeginningCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartFromCurrentSlideCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartPresenterViewCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopCommand))]
+    private bool _isBuilding;
+
+    /// <summary>Null when unknown or not applicable (hosted URLs, Git sources, unreadable folders).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BuildStatusText))]
+    private bool? _isBuildRequired;
+
+    [ObservableProperty]
+    private string? _buildMessage;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanExportPdf))]
@@ -105,6 +128,7 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(SwapDisplaysCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
     [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
+    [NotifyCanExecuteChangedFor(nameof(BuildCommand))]
     private HostState _hostState = HostState.Idle;
 
     [ObservableProperty]
@@ -141,6 +165,7 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(StartPresenterViewCommand))]
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
     [NotifyCanExecuteChangedFor(nameof(ResumeCommand))]
+    [NotifyCanExecuteChangedFor(nameof(BuildCommand))]
     private bool _isRefreshing;
 
     [ObservableProperty]
@@ -253,6 +278,12 @@ public sealed partial class MainViewModel : ObservableObject
     private static readonly string s_appVersion = GetAppVersion();
     public string AppVersion => s_appVersion;
     public bool HasSlides => Slides.Count > 0;
+    public string? BuildStatusText => IsBuildRequired switch
+    {
+        true => "Build: changes detected",
+        false => "Build: up to date",
+        null => null
+    };
     public bool CanExportPdf => SelectedProject?.SourceType == PresentationSourceType.LocalProject && !IsExportingPdf;
     /// <summary>Only projects that map 1:1 to a configured source can be removed; root-scanned projects are managed via their root source.</summary>
     public bool CanRemoveSelectedProject => SelectedProject is not null && _settingsService.Settings.Sources.Any(s => s.Id == SelectedProject.Id);
@@ -280,7 +311,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
     }
 
-    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService, IDisplayService displayService, ISlideDeckPdfExporter? slideDeckPdfExporter = null, IDisplaySelector? displaySelector = null, IGitRepositoryService? gitRepositoryService = null, ICodeEditorService? codeEditorService = null, IExternalBrowserLauncher? browserLauncher = null)
+    public MainViewModel(ISettingsService settingsService, ISourceScanner sourceScanner, ISlidevProcessHost processHost, ISlideDeckMetadataReader slideDeckMetadataReader, IPresentationWindowService presentationWindowService, IDisplayService displayService, ISlideDeckPdfExporter? slideDeckPdfExporter = null, IDisplaySelector? displaySelector = null, IGitRepositoryService? gitRepositoryService = null, ICodeEditorService? codeEditorService = null, IExternalBrowserLauncher? browserLauncher = null, ISlideDeckBuilder? slideDeckBuilder = null)
     {
         _settingsService = settingsService;
         _sourceScanner = sourceScanner;
@@ -290,6 +321,7 @@ public sealed partial class MainViewModel : ObservableObject
         _displayService = displayService;
         _displaySelector = displaySelector ?? new DefaultDisplaySelector();
         _slideDeckPdfExporter = slideDeckPdfExporter ?? new SlidevPdfExporter();
+        _slideDeckBuilder = slideDeckBuilder ?? new SlideDeckBuilder();
         _gitRepositoryService = gitRepositoryService ?? new GitRepositoryService();
         _codeEditorService = codeEditorService ?? new CodeEditorService();
         // No-op by default so headless/test usage never launches the system browser.
@@ -323,7 +355,68 @@ public sealed partial class MainViewModel : ObservableObject
         ResetEditTabIfHidden();
         _ = LoadSelectedProjectMetadataAsync(value);
         _ = LoadSelectedRepositoryBranchesAsync(value);
+        _ = RefreshBuildStatusAsync();
     }
+
+    /// <summary>Re-checks whether the selected local deck changed since its last successful build.</summary>
+    public async Task RefreshBuildStatusAsync()
+    {
+        var version = ++_buildStatusVersion;
+        var project = SelectedProject;
+        if (project?.SourceType != PresentationSourceType.LocalProject)
+        {
+            IsBuildRequired = null;
+            return;
+        }
+
+        bool? required;
+        try
+        {
+            required = await _slideDeckBuilder.IsBuildRequiredAsync(project.ToModel());
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            required = null;
+        }
+
+        if (version == _buildStatusVersion)
+            IsBuildRequired = required;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanBuild))]
+    public async Task BuildAsync()
+    {
+        if (!CanBuild() || SelectedProject is not { } project)
+            return;
+
+        IsBuilding = true;
+        BuildMessage = $"Building \"{project.Name}\"...";
+        using var buildCancellation = new CancellationTokenSource();
+        _buildCancellation = buildCancellation;
+        try
+        {
+            await _slideDeckBuilder.BuildAsync(project.ToModel(), buildCancellation.Token);
+            BuildMessage = $"Built \"{project.Name}\".";
+        }
+        catch (OperationCanceledException)
+        {
+            BuildMessage = "Build cancelled.";
+        }
+        catch (Exception exception)
+        {
+            BuildMessage = $"Build failed: {exception.Message}";
+        }
+        finally
+        {
+            _buildCancellation = null;
+            IsBuilding = false;
+        }
+
+        await RefreshBuildStatusAsync();
+    }
+
+    private bool CanBuild() => SelectedProject?.SourceType == PresentationSourceType.LocalProject
+        && !IsBuilding && !_startInProgress && !IsRefreshing && HostState != HostState.Starting;
 
     private void ResetEditTabIfHidden()
     {
@@ -364,7 +457,12 @@ public sealed partial class MainViewModel : ObservableObject
         if (_isHostedSessionActive)
             return;
 
-        void Update() => ApplyStateSnapshot(e.NewState, _processHost.ParticipantUrl, _processHost.PresenterUrl, _processHost.Port, e.ErrorMessage);
+        void Update()
+        {
+            ApplyStateSnapshot(e.NewState, _processHost.ParticipantUrl, _processHost.PresenterUrl, _processHost.Port, e.ErrorMessage);
+            if (e.NewState is HostState.Running or HostState.Error)
+                _ = RefreshBuildStatusAsync();
+        }
 
         if (_syncContext is null || SynchronizationContext.Current == _syncContext)
             Update();
@@ -379,6 +477,11 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (IsRefreshing)
             return;
+        if (IsBuilding)
+        {
+            SourceMessage = "Wait for the build to finish before refreshing sources.";
+            return;
+        }
         if (HostState is HostState.Starting or HostState.Running
             && _settingsService.Settings.Sources.Any(source => source.IsEnabled && (source.Type is PresentationSourceType.Git or PresentationSourceType.GitHub
                 || (IsLocalSource(source) && !string.IsNullOrWhiteSpace(source.Branch)))))
@@ -649,7 +752,7 @@ public sealed partial class MainViewModel : ObservableObject
             SourceMessage = "Wait for the source refresh to finish before starting a presentation.";
             return;
         }
-        if (SelectedProject is null || HostState != HostState.Idle)
+        if (SelectedProject is null || HostState != HostState.Idle || IsBuilding)
             return;
 
         _startInProgress = true;
@@ -692,8 +795,8 @@ public sealed partial class MainViewModel : ObservableObject
         await _processHost.StartAsync(SelectedProject.ToModel(), port, _localStartupCancellation.Token);
     }
 
-    private bool CanLaunch() => !_startInProgress && !IsRefreshing && SelectedProject is not null && HostState == HostState.Idle;
-    private bool CanStartVariant() => !_startInProgress && !IsRefreshing && SelectedProject is not null
+    private bool CanLaunch() => !_startInProgress && !IsRefreshing && !IsBuilding && SelectedProject is not null && HostState == HostState.Idle;
+    private bool CanStartVariant() => !_startInProgress && !IsRefreshing && !IsBuilding && SelectedProject is not null
         && HostState is HostState.Idle or HostState.Running;
 
     private void NotifyStartCommands()
@@ -704,6 +807,7 @@ public sealed partial class MainViewModel : ObservableObject
         StartPresenterViewCommand.NotifyCanExecuteChanged();
         ResumeCommand.NotifyCanExecuteChanged();
         RetryCommand.NotifyCanExecuteChanged();
+        BuildCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand(CanExecute = nameof(CanRemoveSelectedProject))]
@@ -805,6 +909,9 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanStop))]
     public async Task StopAsync()
     {
+        _buildCancellation?.Cancel();
+        if (IsBuilding && !_startInProgress && HostState == HostState.Idle)
+            return;
         _localStartupCancellation?.Cancel();
         if (_isHostedSessionActive)
         {
@@ -815,7 +922,7 @@ public sealed partial class MainViewModel : ObservableObject
         await _processHost.StopAsync();
     }
 
-    private bool CanStop() => _startInProgress || HostState is HostState.Starting or HostState.Running;
+    private bool CanStop() => _startInProgress || IsBuilding || HostState is HostState.Starting or HostState.Running;
 
     [RelayCommand(CanExecute = nameof(CanSwapDisplays))]
     public Task SwapDisplaysAsync() => _presentationWindowService.SwapDisplaysAsync();
@@ -829,7 +936,7 @@ public sealed partial class MainViewModel : ObservableObject
         await StartForSlideAsync(slideNumber, SelectedSurfaceMode);
     }
 
-    private bool CanResume() => !_startInProgress && !IsRefreshing && IsIdle && SelectedProject is not null && HasLastKnownPosition;
+    private bool CanResume() => !_startInProgress && !IsRefreshing && !IsBuilding && IsIdle && SelectedProject is not null && HasLastKnownPosition;
 
     [RelayCommand(CanExecute = nameof(CanRetry))]
     public async Task RetryAsync()
@@ -864,7 +971,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    private bool CanRetry() => !_startInProgress && !IsRefreshing && SelectedProject is not null && HostState == HostState.Error;
+    private bool CanRetry() => !_startInProgress && !IsRefreshing && !IsBuilding && SelectedProject is not null && HostState == HostState.Error;
 
     [RelayCommand]
     public void OpenCurrentSurfaceInBrowser() => TryOpenBrowser(CurrentSurfaceUrl);
@@ -1273,7 +1380,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        if (_startInProgress || HostState != HostState.Idle || IsRefreshing || SelectedProject is null)
+        if (_startInProgress || HostState != HostState.Idle || IsRefreshing || IsBuilding || SelectedProject is null)
             return;
 
         _startInProgress = true;

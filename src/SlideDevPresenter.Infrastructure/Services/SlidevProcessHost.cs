@@ -37,6 +37,9 @@ public sealed class SlidevProcessHost : ISlidevProcessHost
     public SlidevProcessHost(ILogger<SlidevProcessHost> logger)
         : this(logger, DefaultProcessFactory, new SlideDeckBuilder()) { }
 
+    public SlidevProcessHost(ILogger<SlidevProcessHost> logger, ISlideDeckBuilder builder)
+        : this(logger, DefaultProcessFactory, builder) { }
+
     internal SlidevProcessHost(
         ILogger<SlidevProcessHost> logger,
         Func<ProcessStartInfo, IRunningProcess> processFactory,
@@ -90,7 +93,7 @@ public sealed class SlidevProcessHost : ISlidevProcessHost
         try
         {
             if (_builder is not null)
-                await _builder.BuildAsync(project, startup.Token);
+                await _builder.BuildIfRequiredAsync(project, startup.Token);
             startup.Token.ThrowIfCancellationRequested();
 
             var slidesPath = project.SlidesFilePath ?? Path.Combine(project.Location, "slides.md");

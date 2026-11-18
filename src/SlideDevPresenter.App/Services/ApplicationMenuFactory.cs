@@ -49,6 +49,7 @@ public static class ApplicationMenuFactory
             Item("Open Deck Location", commands.OpenDeckLocation),
             Item("Copy Deck Location", commands.CopyDeckLocation),
             Item("Open in VS Code", commands.OpenInVsCode),
+            Item("Build Deck", commands.BuildDeck),
             Item("Export PDF…", commands.ExportPdf),
             new NativeMenuItemSeparator(),
             Item("Remove from Library", commands.RemoveFromLibrary)));

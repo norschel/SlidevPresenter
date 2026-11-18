@@ -54,6 +54,12 @@ public class SlidevProcessHostTests
     {
         public TaskCompletionSource Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task BuildAsync(PresentationProject project, CancellationToken cancellationToken = default) => Completion.Task.WaitAsync(cancellationToken);
+        public Task<bool> IsBuildRequiredAsync(PresentationProject project, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public async Task<bool> BuildIfRequiredAsync(PresentationProject project, CancellationToken cancellationToken = default)
+        {
+            await BuildAsync(project, cancellationToken);
+            return true;
+        }
     }
 
     [Fact]
