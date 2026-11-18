@@ -9,6 +9,8 @@ namespace SlideDevPresenter.Infrastructure.Services;
 
 public sealed class SlideDeckBuilder : ISlideDeckBuilder
 {
+    private static readonly HashSet<string> ExcludedSourceDirectories = new(StringComparer.OrdinalIgnoreCase) { "node_modules", ".git", "dist", ".slidev" };
+    private const string BuildMarkerName = ".slidev-presenter-build";
     private static readonly string[] ManifestFiles = ["package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb", ".npmrc", ".yarnrc.yml"];
     private readonly Func<ProcessStartInfo, CancellationToken, Task<(int ExitCode, string Output)>> _run;
 
@@ -16,10 +18,32 @@ public sealed class SlideDeckBuilder : ISlideDeckBuilder
 
     internal SlideDeckBuilder(Func<ProcessStartInfo, CancellationToken, Task<(int ExitCode, string Output)>> run) => _run = run;
 
+    public async Task<bool> IsBuildRequiredAsync(PresentationProject project, CancellationToken cancellationToken = default)
+    {
+        EnsureLocalProject(project);
+        var directory = Path.GetFullPath(project.Location);
+        var dependencyMarker = Path.Combine(directory, "node_modules", ".slidev-presenter-dependencies");
+        var buildMarker = GetBuildMarkerPath(directory);
+        if (!File.Exists(GetCliPath(directory)) || !File.Exists(dependencyMarker) || !File.Exists(buildMarker)
+            || !File.Exists(Path.Combine(directory, "dist", "index.html")))
+            return true;
+        if (await File.ReadAllTextAsync(dependencyMarker, cancellationToken) != await FingerprintAsync(directory, cancellationToken))
+            return true;
+        var sources = await Task.Run(() => SourceFingerprint(directory, GetSlidesPath(project, directory), cancellationToken), cancellationToken);
+        return await File.ReadAllTextAsync(buildMarker, cancellationToken) != sources;
+    }
+
+    public async Task<bool> BuildIfRequiredAsync(PresentationProject project, CancellationToken cancellationToken = default)
+    {
+        if (!await IsBuildRequiredAsync(project, cancellationToken))
+            return false;
+        await BuildAsync(project, cancellationToken);
+        return true;
+    }
+
     public async Task BuildAsync(PresentationProject project, CancellationToken cancellationToken = default)
     {
-        if (project.SourceType != PresentationSourceType.LocalProject)
-            throw new ArgumentException("Only local Slidev projects can be compiled.", nameof(project));
+        EnsureLocalProject(project);
         var directory = Path.GetFullPath(project.Location);
         var packagePath = Path.Combine(directory, "package.json");
         if (!File.Exists(packagePath))
@@ -44,8 +68,49 @@ public sealed class SlideDeckBuilder : ISlideDeckBuilder
                 throw new InvalidOperationException($"Slidev CLI is missing after dependency installation in {directory}. Add @slidev/cli to the project and install dependencies manually, then retry.");
             await File.WriteAllTextAsync(marker, await FingerprintAsync(directory, cancellationToken), cancellationToken);
         }
-        var slides = Path.GetFullPath(project.SlidesFilePath ?? Path.Combine(directory, "slides.md"));
+        var slides = GetSlidesPath(project, directory);
+        var buildMarker = GetBuildMarkerPath(directory);
+        // Fingerprint before compiling so edits made during the build still mark the deck as changed.
+        var sources = await Task.Run(() => SourceFingerprint(directory, slides, cancellationToken), cancellationToken);
+        File.Delete(buildMarker);
         await ExecuteAsync(CreateStartInfo("node", directory, cli, "build", slides), "Slidev compilation", cancellationToken);
+        await File.WriteAllTextAsync(buildMarker, sources, cancellationToken);
+    }
+
+    private static void EnsureLocalProject(PresentationProject project)
+    {
+        if (project.SourceType != PresentationSourceType.LocalProject)
+            throw new ArgumentException("Only local Slidev projects can be compiled.", nameof(project));
+    }
+
+    private static string GetSlidesPath(PresentationProject project, string directory) =>
+        Path.GetFullPath(project.SlidesFilePath ?? Path.Combine(directory, "slides.md"));
+
+    private static string GetBuildMarkerPath(string directory) => Path.Combine(directory, "node_modules", BuildMarkerName);
+
+    private static string SourceFingerprint(string directory, string slidesPath, CancellationToken cancellationToken)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        hash.AppendData(Encoding.UTF8.GetBytes(Path.GetRelativePath(directory, slidesPath) + "\n"));
+        var files = new List<string>();
+        var pending = new Stack<string>([directory]);
+        while (pending.Count > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var current = pending.Pop();
+            files.AddRange(Directory.EnumerateFiles(current));
+            foreach (var child in Directory.EnumerateDirectories(current))
+            {
+                if (!ExcludedSourceDirectories.Contains(Path.GetFileName(child)))
+                    pending.Push(child);
+            }
+        }
+        foreach (var file in files.Select(file => Path.GetRelativePath(directory, file)).Order(StringComparer.Ordinal))
+        {
+            var info = new FileInfo(Path.Combine(directory, file));
+            hash.AppendData(Encoding.UTF8.GetBytes($"{file}|{info.Length}|{info.LastWriteTimeUtc.Ticks}\n"));
+        }
+        return Convert.ToHexString(hash.GetHashAndReset());
     }
 
     internal static string GetCliPath(string directory) => Path.Combine(directory, "node_modules", "@slidev", "cli", "bin", "slidev.mjs");

@@ -177,6 +177,34 @@ internal sealed class FakeSlideDeckPdfExporter : ISlideDeckPdfExporter
     }
 }
 
+internal sealed class FakeSlideDeckBuilder : ISlideDeckBuilder
+{
+    public bool BuildRequired { get; set; } = true;
+    public int BuildCount { get; private set; }
+    public Task? BuildTask { get; set; }
+    public Exception? ExceptionToThrow { get; set; }
+
+    public Task<bool> IsBuildRequiredAsync(PresentationProject project, CancellationToken cancellationToken = default) => Task.FromResult(BuildRequired);
+
+    public async Task BuildAsync(PresentationProject project, CancellationToken cancellationToken = default)
+    {
+        BuildCount++;
+        if (BuildTask is not null)
+            await BuildTask.WaitAsync(cancellationToken);
+        if (ExceptionToThrow is not null)
+            throw ExceptionToThrow;
+        BuildRequired = false;
+    }
+
+    public async Task<bool> BuildIfRequiredAsync(PresentationProject project, CancellationToken cancellationToken = default)
+    {
+        if (!BuildRequired)
+            return false;
+        await BuildAsync(project, cancellationToken);
+        return true;
+    }
+}
+
 internal sealed class FakeGitRepositoryService : IGitRepositoryService
 {
     public bool Available { get; set; } = true;
@@ -212,8 +240,9 @@ public class MainViewModelTests
         FakeDisplayService? displayService = null,
         FakeSlideDeckPdfExporter? pdfExporter = null,
         FakeDisplaySelector? displaySelector = null,
-        FakeGitRepositoryService? gitService = null) =>
-        new(settings ?? new(), scanner ?? new(), host ?? new(), reader ?? new(), windowService ?? new(), displayService ?? new(), pdfExporter, displaySelector, gitService);
+        FakeGitRepositoryService? gitService = null,
+        FakeSlideDeckBuilder? builder = null) =>
+        new(settings ?? new(), scanner ?? new(), host ?? new(), reader ?? new(), windowService ?? new(), displayService ?? new(), pdfExporter, displaySelector, gitService, slideDeckBuilder: builder ?? new());
 
     [Theory]
     [InlineData(PresentationSourceType.Git)]
@@ -512,6 +541,81 @@ public class MainViewModelTests
 
         Assert.Equal(expected, vm.IsRunning);
         Assert.Contains(nameof(MainViewModel.IsRunning), changedProperties);
+    }
+
+    [Fact]
+    public async Task Build_AlwaysBuildsAndUpdatesStatus()
+    {
+        var builder = new FakeSlideDeckBuilder { BuildRequired = false };
+        var vm = CreateViewModel(builder: builder);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.RefreshBuildStatusAsync();
+        Assert.Equal("Build: up to date", vm.BuildStatusText);
+
+        await vm.BuildCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, builder.BuildCount);
+        Assert.Equal("Built \"Talk\".", vm.BuildMessage);
+        Assert.False(vm.IsBuilding);
+    }
+
+    [Fact]
+    public async Task SelectingChangedProject_ShowsBuildRequired()
+    {
+        var vm = CreateViewModel(builder: new FakeSlideDeckBuilder { BuildRequired = true });
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.RefreshBuildStatusAsync();
+
+        Assert.Equal("Build: changes detected", vm.BuildStatusText);
+    }
+
+    [Fact]
+    public async Task Build_WhileRunning_BlocksStartAndStopCancelsIt()
+    {
+        var pending = new TaskCompletionSource();
+        var builder = new FakeSlideDeckBuilder { BuildTask = pending.Task };
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host, builder: builder);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+
+        var build = vm.BuildCommand.ExecuteAsync(null);
+
+        Assert.True(vm.IsBuilding);
+        Assert.False(vm.LaunchCommand.CanExecute(null));
+        Assert.False(vm.BuildCommand.CanExecute(null));
+        Assert.True(vm.StopCommand.CanExecute(null));
+
+        await vm.StopAsync();
+        await build;
+
+        Assert.Equal("Build cancelled.", vm.BuildMessage);
+        Assert.False(vm.IsBuilding);
+        Assert.True(vm.LaunchCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Build_ReportsFailures()
+    {
+        var vm = CreateViewModel(builder: new FakeSlideDeckBuilder { ExceptionToThrow = new InvalidOperationException("Slidev compilation failed") });
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+
+        await vm.BuildCommand.ExecuteAsync(null);
+
+        Assert.Equal("Build failed: Slidev compilation failed", vm.BuildMessage);
+        Assert.Equal("Build: changes detected", vm.BuildStatusText);
+    }
+
+    [Fact]
+    public void Build_IsUnavailableForHostedProjects()
+    {
+        var vm = CreateViewModel();
+        vm.SelectedProject = new PresentationProjectViewModel(new PresentationProject
+        {
+            Id = Guid.NewGuid(), Name = "Hosted", SourceType = PresentationSourceType.HostedUrl, Location = "https://example.com"
+        });
+
+        Assert.False(vm.BuildCommand.CanExecute(null));
+        Assert.Null(vm.BuildStatusText);
     }
 
     [Fact]

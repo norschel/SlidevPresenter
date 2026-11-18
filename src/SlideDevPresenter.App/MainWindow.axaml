@@ -44,7 +44,9 @@
                                 <Button x:Name="HomeStartFromCurrentButton" Content="From Current Slide" Command="{Binding StartFromCurrentSlideCommand}" ToolTip.Tip="Start from selected slide"/>
                                 <Button x:Name="HomeStartPresenterViewButton" Content="Presenter View" Command="{Binding StartPresenterViewCommand}" ToolTip.Tip="Start presenter view"/>
                                 <Button Content="⏎ Resume" Command="{Binding ResumeCommand}" IsVisible="{Binding HasLastKnownPosition}" ToolTip.Tip="Resume presentation from last saved position"/>
+                                <Button Content="⚙ Build" Command="{Binding BuildCommand}" ToolTip.Tip="Compile the selected local Slidev deck now, even if no changes were detected"/>
                                 <TextBlock Text="{Binding SelectedProject.Name}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                <TextBlock Text="{Binding BuildStatusText}" VerticalAlignment="Center" Opacity="0.7"/>
                             </StackPanel>
                             <Button Content="■ Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsPresentationActive}" ToolTip.Tip="Stop presentation"/>
                             <Button Content="↻ Retry" Command="{Binding RetryCommand}" IsVisible="{Binding IsError}" ToolTip.Tip="Retry presentation"/>
@@ -56,6 +58,7 @@
                             <Button Content="Import Library..." Click="ImportLibrary_Click" ToolTip.Tip="Add hosted presentations from a shared library JSON file"/>
                             <Button Content="Export Library..." Click="ExportLibrary_Click" ToolTip.Tip="Save the hosted presentations in your library as a shareable JSON file"/>
                             <Button Content="Export PDF" Click="ExportPdf_Click" IsEnabled="{Binding CanExportPdf}" ToolTip.Tip="Export the selected local Slidev deck as a PDF"/>
+                            <Button Content="⚙ Build" Command="{Binding BuildCommand}" ToolTip.Tip="Compile the selected local Slidev deck now, even if no changes were detected"/>
                             <TextBlock Text="{Binding DeckTitle}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="12,0,0,0"/>
                             <TextBlock Text="{Binding SlideCount, StringFormat='Slides: {0}'}" VerticalAlignment="Center" Opacity="0.7"/>
                         </StackPanel>
@@ -124,6 +127,7 @@
                     <ListBox.ContextMenu>
                         <ContextMenu>
                             <MenuItem Header="▶ Start Presentation" Command="{Binding LaunchCommand}"/>
+                            <MenuItem Header="Build" Command="{Binding BuildCommand}"/>
                             <MenuItem Header="Export PDF..." Click="ExportPdf_Click" IsEnabled="{Binding CanExportPdf}"/>
                             <Separator/>
                             <MenuItem Header="Open Location" Command="{Binding OpenSelectedProjectLocationCommand}" ToolTip.Tip="Open the project folder or hosted URL"/>
@@ -342,6 +346,8 @@
                 <TextBlock Text="{Binding ElapsedPresentationTimeText, StringFormat='Elapsed: {0}'}" FontSize="12"/>
                 <TextBlock Text="{Binding Port, StringFormat='Port: {0}'}" FontSize="12"/>
                 <TextBlock Text="{Binding SlideCount, StringFormat='Slides: {0}'}" FontSize="12"/>
+                <TextBlock Text="{Binding BuildStatusText}" FontSize="12"/>
+                <TextBlock Text="{Binding BuildMessage}" FontSize="12"/>
                 <TextBlock Text="{Binding PdfExportMessage}" FontSize="12"/>
                 <TextBlock Text="{Binding LibraryMessage}" FontSize="12"/>
             </StackPanel>

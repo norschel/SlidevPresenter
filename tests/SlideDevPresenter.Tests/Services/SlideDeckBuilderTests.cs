@@ -26,6 +26,11 @@ public sealed class SlideDeckBuilderTests : IDisposable
                 Directory.CreateDirectory(Path.GetDirectoryName(cli)!);
                 File.WriteAllText(cli, "");
             }
+            if (_exitCode == 0 && info.FileName == "node")
+            {
+                Directory.CreateDirectory(Path.Combine(_directory, "dist"));
+                File.WriteAllText(Path.Combine(_directory, "dist", "index.html"), "<html></html>");
+            }
             return Task.FromResult((_exitCode, _exitCode == 0 ? "" : "compiler failure details"));
         });
     }
@@ -96,6 +101,60 @@ public sealed class SlideDeckBuilderTests : IDisposable
         _exitCode = 1;
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _builder.BuildAsync(Project()));
         Assert.Contains("Slidev compilation failed", error.Message);
+    }
+
+    [Fact]
+    public async Task BuildIfRequiredAsync_NoChanges_SkipsCompilation()
+    {
+        Assert.True(await _builder.IsBuildRequiredAsync(Project()));
+        Assert.True(await _builder.BuildIfRequiredAsync(Project()));
+        _commands.Clear();
+
+        Assert.False(await _builder.IsBuildRequiredAsync(Project()));
+        Assert.False(await _builder.BuildIfRequiredAsync(Project()));
+        Assert.Empty(_commands);
+    }
+
+    [Fact]
+    public async Task BuildIfRequiredAsync_SlidesEdited_Recompiles()
+    {
+        await _builder.BuildAsync(Project());
+        _commands.Clear();
+        File.WriteAllText(Path.Combine(_directory, "slides.md"), "# Talk\n\n---\n\n# New slide");
+
+        Assert.True(await _builder.BuildIfRequiredAsync(Project()));
+
+        Assert.Equal("node", Assert.Single(_commands).FileName);
+    }
+
+    [Fact]
+    public async Task IsBuildRequiredAsync_IgnoresOutputAndDependencyFolders()
+    {
+        await _builder.BuildAsync(Project());
+        File.WriteAllText(Path.Combine(_directory, "dist", "extra.js"), "generated");
+        File.WriteAllText(Path.Combine(_directory, "node_modules", "cache.txt"), "cache");
+
+        Assert.False(await _builder.IsBuildRequiredAsync(Project()));
+    }
+
+    [Fact]
+    public async Task IsBuildRequiredAsync_OutputMissing_RequiresBuild()
+    {
+        await _builder.BuildAsync(Project());
+        Directory.Delete(Path.Combine(_directory, "dist"), true);
+
+        Assert.True(await _builder.IsBuildRequiredAsync(Project()));
+    }
+
+    [Fact]
+    public async Task IsBuildRequiredAsync_AfterFailedBuild_RequiresBuild()
+    {
+        await _builder.BuildAsync(Project());
+        _exitCode = 1;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _builder.BuildAsync(Project()));
+        _exitCode = 0;
+
+        Assert.True(await _builder.IsBuildRequiredAsync(Project()));
     }
 
     [Fact]

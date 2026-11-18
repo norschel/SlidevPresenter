@@ -9,7 +9,7 @@ This document describes the implemented scope, architecture, and operating const
 - Desktop shell and launcher around Slidev with a ribbon-style UI (Home, Library, View, Presentation, Browser, Edit tabs), library sidebar, and status bar
 - Source management for local roots, local projects, hosted URLs, Git repositories, and GitHub repositories, including branch selection, checkout reuse, and library import/export (JSON)
 - Git workflows with terminal-based cloning, confirmed pull/branch-switch operations, noninteractive fetch on repository refresh, and recovery guidance without discarding local changes; refresh is blocked while building or presenting
-- Slidev build pipeline: dependency installation based on lockfile/`packageManager` (npm, pnpm, Yarn, Bun), manifest hashing to skip redundant installs, and local `@slidev/cli` build before launch; Stop cancels installation/build, and hosted URLs bypass compilation
+- Slidev build pipeline: dependency installation based on lockfile/`packageManager` (npm, pnpm, Yarn, Bun), manifest hashing to skip redundant installs, and local `@slidev/cli` build before launch only when deck sources changed since the last successful build; a manual Build command always compiles; Stop cancels installation/build, and hosted URLs bypass compilation
 - Slidev process lifecycle management (dev server start/stop/retry, actual port and loopback URL detection from ANSI-stripped current and legacy ready banners)
 - Presenter and participant workflows: embedded WebView surfaces, swap between surfaces, participant window on a second display with display detection/selection, blank overlay mirroring, and keyboard routing via WebView messages
 - Thumbnail, agenda, and timer panels alongside the presentation surface

@@ -180,6 +180,7 @@ public partial class MainWindow : Window
             OpenDeckLocation = Forward(viewModel?.OpenSelectedProjectLocationCommand),
             CopyDeckLocation = Gated(() => _ = CopyProjectLocationAsync(), () => _viewModel?.SelectedProject is not null),
             OpenInVsCode = Forward(viewModel?.EditSelectedProjectCommand),
+            BuildDeck = Forward(viewModel?.BuildCommand),
             ExportPdf = Gated(() => _ = ExportPdfAsync(), () => _viewModel?.CanExportPdf == true),
             RemoveFromLibrary = Forward(viewModel?.RemoveSelectedProjectFromLibraryCommand),
 
