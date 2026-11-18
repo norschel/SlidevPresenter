@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -99,10 +100,10 @@ public sealed class SlideDeckBuilder : ISlideDeckBuilder
             cancellationToken.ThrowIfCancellationRequested();
             var current = pending.Pop();
             files.AddRange(Directory.EnumerateFiles(current));
-            foreach (var child in Directory.EnumerateDirectories(current))
+            foreach (var child in Directory.EnumerateDirectories(current)
+                .Where(child => !ExcludedSourceDirectories.Contains(Path.GetFileName(child))))
             {
-                if (!ExcludedSourceDirectories.Contains(Path.GetFileName(child)))
-                    pending.Push(child);
+                pending.Push(child);
             }
         }
         foreach (var file in files.Select(file => Path.GetRelativePath(directory, file)).Order(StringComparer.Ordinal))
