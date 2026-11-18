@@ -950,7 +950,8 @@ public sealed partial class MainViewModel : ObservableObject
             // Wait until the build process is killed so callers such as the updater do not race it.
             if (_activeBuild is { } build)
                 await Task.WhenAny(build);
-            return;
+            if (HostState == HostState.Idle)
+                return;
         }
         _localStartupCancellation?.Cancel();
         if (_isHostedSessionActive)

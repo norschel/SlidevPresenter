@@ -734,6 +734,28 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public async Task Stop_DuringBuildInErrorState_WaitsForBuildAndStopsProcessHost()
+    {
+        var cleanup = new TaskCompletionSource();
+        var builder = new FakeSlideDeckBuilder { BuildTask = new TaskCompletionSource().Task, CancellationCleanupTask = cleanup.Task };
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host, builder: builder);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        host.SimulateError("Previous shutdown failed.");
+        var build = vm.BuildCommand.ExecuteAsync(null);
+
+        var stop = vm.StopAsync();
+
+        Assert.False(stop.IsCompleted);
+        cleanup.SetResult();
+        await stop;
+        await build;
+
+        Assert.Equal(1, host.StopCallCount);
+        Assert.Equal("Build cancelled.", vm.BuildMessage);
+    }
+
+    [Fact]
     public void Build_IsUnavailableForHostedProjects()
     {
         var vm = CreateViewModel();

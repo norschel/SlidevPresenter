@@ -99,11 +99,12 @@ public sealed class SlideDeckBuilder : ISlideDeckBuilder
     private static string SourceFingerprint(string directory, string slidesPath, CancellationToken cancellationToken)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        hash.AppendData(Encoding.UTF8.GetBytes(Path.GetRelativePath(directory, slidesPath) + "\n"));
+        var slidesRelativePath = Path.GetRelativePath(directory, slidesPath);
         var files = new List<string>();
-        var root = Path.TrimEndingDirectorySeparator(directory);
+        var root = ResolveDirectory(directory) ?? Path.TrimEndingDirectorySeparator(directory);
         var visited = new HashSet<string>(PathComparer) { root };
         var pending = new Stack<(string Path, string Resolved)>([(root, root)]);
+        var links = new List<string>();
         while (pending.Count > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -115,13 +116,20 @@ public sealed class SlideDeckBuilder : ISlideDeckBuilder
                 if (ExcludedSourceDirectories.Contains(name) || (current == root && ExcludedRootDirectories.Contains(name)))
                     continue;
                 // Directory links may point back to the deck or an ancestor; follow each resolved target only once.
-                if (ResolveDirectory(Path.Combine(resolved, name)) is { } target && visited.Add(target))
+                var linkTarget = new DirectoryInfo(child).LinkTarget;
+                var target = ResolveDirectory(Path.Combine(resolved, name));
+                if (linkTarget is not null)
+                    links.Add($"{Path.GetRelativePath(root, child)}|{linkTarget}\n");
+                if (target is not null && visited.Add(target))
                     pending.Push((child, target));
             }
         }
-        foreach (var file in files.Select(file => Path.GetRelativePath(directory, file)).Order(StringComparer.Ordinal))
+        hash.AppendData(Encoding.UTF8.GetBytes(slidesRelativePath + "\n"));
+        foreach (var link in links.Order(StringComparer.Ordinal))
+            hash.AppendData(Encoding.UTF8.GetBytes(link));
+        foreach (var file in files.Select(file => Path.GetRelativePath(root, file)).Order(StringComparer.Ordinal))
         {
-            var info = new FileInfo(Path.Combine(directory, file));
+            var info = new FileInfo(Path.Combine(root, file));
             hash.AppendData(Encoding.UTF8.GetBytes($"{file}|{info.Length}|{info.LastWriteTimeUtc.Ticks}\n"));
         }
         return Convert.ToHexString(hash.GetHashAndReset());
@@ -135,15 +143,48 @@ public sealed class SlideDeckBuilder : ISlideDeckBuilder
 
     private static string? ResolveDirectory(string path)
     {
-        for (var hop = 0; hop < MaxLinkHops; hop++)
+        var root = Path.GetPathRoot(path)!;
+        var current = root;
+        var pending = new LinkedList<string>(GetPathComponents(path, root));
+        var hops = 0;
+        while (pending.First is { } component)
         {
-            var target = new DirectoryInfo(path).LinkTarget;
-            if (target is null)
-                return path;
-            path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(target, Path.GetDirectoryName(path)!));
+            pending.RemoveFirst();
+            if (component.Value is "." or "")
+                continue;
+            if (component.Value == "..")
+            {
+                current = Directory.GetParent(current)?.FullName ?? current;
+                continue;
+            }
+
+            var candidate = Path.Combine(current, component.Value);
+            var linkTarget = new DirectoryInfo(candidate).LinkTarget;
+            if (linkTarget is null)
+            {
+                current = candidate;
+                continue;
+            }
+
+            if (++hops > MaxLinkHops)
+                return null;
+            if (Path.IsPathRooted(linkTarget))
+            {
+                current = Path.GetPathRoot(linkTarget)!;
+                foreach (var targetComponent in GetPathComponents(linkTarget, current).Reverse())
+                    pending.AddFirst(targetComponent);
+            }
+            else
+            {
+                foreach (var targetComponent in GetPathComponents(linkTarget, "").Reverse())
+                    pending.AddFirst(targetComponent);
+            }
         }
-        return null;
+        return Path.TrimEndingDirectorySeparator(current);
     }
+
+    private static IEnumerable<string> GetPathComponents(string path, string root) =>
+        path[root.Length..].Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
 
     internal static string GetCliPath(string directory) => Path.Combine(directory, "node_modules", "@slidev", "cli", "bin", "slidev.mjs");
 

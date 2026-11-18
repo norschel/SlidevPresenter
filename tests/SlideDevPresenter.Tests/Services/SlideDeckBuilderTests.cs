@@ -183,6 +183,83 @@ public sealed class SlideDeckBuilderTests : IDisposable
     }
 
     [Fact]
+    public async Task IsBuildRequiredAsync_LinkRetargetedToVisitedDirectory_RequiresBuild()
+    {
+        var light = Path.Combine(_directory, "light");
+        var dark = Path.Combine(_directory, "dark");
+        Directory.CreateDirectory(light);
+        Directory.CreateDirectory(dark);
+        File.WriteAllText(Path.Combine(light, "theme.css"), "light {}");
+        File.WriteAllText(Path.Combine(dark, "theme.css"), "dark {}");
+        var theme = Path.Combine(_directory, "theme");
+        if (!TryCreateDirectoryLink(theme, "light"))
+            return;
+
+        await _builder.BuildAsync(Project());
+        Directory.Delete(theme);
+        Directory.CreateSymbolicLink(theme, "dark");
+
+        Assert.True(await _builder.IsBuildRequiredAsync(Project()));
+    }
+
+    [Fact]
+    public async Task IsBuildRequiredAsync_LinkTargetWithIntermediateSymlinkAndParentSegment_RequiresBuild()
+    {
+        var external = Path.Combine(Path.GetTempPath(), "presenter-external-" + Guid.NewGuid());
+        var common = Path.Combine(external, "common");
+        var externalAssets = Path.Combine(external, "assets");
+        Directory.CreateDirectory(common);
+        Directory.CreateDirectory(externalAssets);
+        Directory.CreateDirectory(Path.Combine(_directory, "assets"));
+        File.WriteAllText(Path.Combine(externalAssets, "theme.css"), "a {}");
+        File.WriteAllText(Path.Combine(_directory, "assets", "theme.css"), "b {}");
+        try
+        {
+            if (!TryCreateDirectoryLink(Path.Combine(_directory, "shared"), common)
+                || !TryCreateDirectoryLink(Path.Combine(_directory, "theme"), "shared/../assets"))
+                return;
+            await _builder.BuildAsync(Project());
+
+            File.WriteAllText(Path.Combine(externalAssets, "theme.css"), "a { color: red; }");
+
+            Assert.True(await _builder.IsBuildRequiredAsync(Project()));
+        }
+        finally
+        {
+            Directory.Delete(external, true);
+        }
+    }
+
+    [Fact]
+    public async Task IsBuildRequiredAsync_SymlinkedProjectRoot_DoesNotRevisitExcludedOutput()
+    {
+        var alias = Path.Combine(Path.GetTempPath(), "presenter-root-" + Guid.NewGuid());
+        if (!TryCreateDirectoryLink(alias, _directory))
+            return;
+        try
+        {
+            if (!TryCreateDirectoryLink(Path.Combine(_directory, "loop"), _directory))
+                return;
+            Directory.CreateDirectory(Path.Combine(_directory, "dist"));
+            File.WriteAllText(Path.Combine(_directory, "dist", "generated.js"), "first");
+            var project = new PresentationProject
+            {
+                Id = Guid.NewGuid(), Name = "Talk", SourceType = PresentationSourceType.LocalProject,
+                Location = alias, SlidesFilePath = Path.Combine(alias, "slides.md")
+            };
+            await _builder.BuildAsync(project);
+
+            File.WriteAllText(Path.Combine(_directory, "dist", "generated.js"), "changed");
+
+            Assert.False(await _builder.IsBuildRequiredAsync(project));
+        }
+        finally
+        {
+            Directory.Delete(alias);
+        }
+    }
+
+    [Fact]
     public async Task BuildAsync_ReinstallFails_InvalidatesMarkers()
     {
         await _builder.BuildAsync(Project());
