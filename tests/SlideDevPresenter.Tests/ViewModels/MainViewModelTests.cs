@@ -182,6 +182,8 @@ internal sealed class FakeSlideDeckBuilder : ISlideDeckBuilder
     public bool BuildRequired { get; set; } = true;
     public int BuildCount { get; private set; }
     public Task? BuildTask { get; set; }
+    /// <summary>When set, a cancelled build only finishes once this completes, like a process being killed.</summary>
+    public Task? CancellationCleanupTask { get; set; }
     public Exception? ExceptionToThrow { get; set; }
 
     public Task<bool> IsBuildRequiredAsync(PresentationProject project, CancellationToken cancellationToken = default) => Task.FromResult(BuildRequired);
@@ -190,7 +192,17 @@ internal sealed class FakeSlideDeckBuilder : ISlideDeckBuilder
     {
         BuildCount++;
         if (BuildTask is not null)
-            await BuildTask.WaitAsync(cancellationToken);
+        {
+            try
+            {
+                await BuildTask.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (CancellationCleanupTask is not null)
+            {
+                await CancellationCleanupTask;
+                throw;
+            }
+        }
         if (ExceptionToThrow is not null)
             throw ExceptionToThrow;
         BuildRequired = false;
@@ -603,6 +615,144 @@ public class MainViewModelTests
 
         Assert.Equal("Build failed: Slidev compilation failed", vm.BuildMessage);
         Assert.Equal("Build: changes detected", vm.BuildStatusText);
+    }
+
+    [Fact]
+    public async Task Build_Failure_ShowsDismissibleDetails()
+    {
+        var vm = CreateViewModel(builder: new FakeSlideDeckBuilder { ExceptionToThrow = new InvalidOperationException("Slidev compilation failed") });
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+
+        await vm.BuildCommand.ExecuteAsync(null);
+
+        Assert.Equal("Slidev compilation failed", vm.BuildErrorDetails);
+        vm.DismissBuildErrorCommand.Execute(null);
+        Assert.Null(vm.BuildErrorDetails);
+    }
+
+    [Theory]
+    [InlineData(HostState.Starting)]
+    [InlineData(HostState.Running)]
+    public void Build_IsUnavailableWhilePresentationIsActive(HostState state)
+    {
+        var vm = CreateViewModel();
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        Assert.True(vm.BuildCommand.CanExecute(null));
+
+        vm.HostState = state;
+
+        Assert.False(vm.BuildCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Build_AndPdfExport_DoNotOverlap()
+    {
+        var export = new TaskCompletionSource();
+        var vm = CreateViewModel(pdfExporter: new FakeSlideDeckPdfExporter { ExportTask = export.Task });
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+
+        var exporting = vm.ExportPdfAsync("/tmp/talk.pdf");
+        Assert.False(vm.BuildCommand.CanExecute(null));
+        export.SetResult();
+        await exporting;
+        Assert.True(vm.BuildCommand.CanExecute(null));
+
+        var pending = new TaskCompletionSource();
+        var builder = new FakeSlideDeckBuilder { BuildTask = pending.Task };
+        var exporter = new FakeSlideDeckPdfExporter();
+        vm = CreateViewModel(pdfExporter: exporter, builder: builder);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        var build = vm.BuildCommand.ExecuteAsync(null);
+
+        Assert.False(vm.CanExportPdf);
+        await vm.ExportPdfAsync("/tmp/talk.pdf");
+        Assert.Null(exporter.ExportedProject);
+
+        pending.SetResult();
+        await build;
+        Assert.True(vm.CanExportPdf);
+    }
+
+    [Fact]
+    public async Task Build_RejectsSourceMutationsAndDefersRefresh()
+    {
+        var settings = new FakeSettingsService();
+        var source = new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Repository", Type = PresentationSourceType.Git,
+            Location = "https://github.com/owner/slides", Branch = "main"
+        };
+        settings.Settings.Sources.Add(source);
+        var git = new FakeGitRepositoryService();
+        var pending = new TaskCompletionSource();
+        var vm = CreateViewModel(settings, gitService: git, builder: new FakeSlideDeckBuilder { BuildTask = pending.Task });
+        var project = MakeProject();
+        settings.Settings.Sources.Add(new PresentationSource { Id = project.Id, Name = "Talk", Type = PresentationSourceType.LocalProject, Location = project.Location });
+        vm.SelectedProject = new PresentationProjectViewModel(project, source.Id);
+        Assert.True(vm.CanChangeSelectedBranch);
+        Assert.True(vm.CanRemoveSelectedProject);
+
+        var build = vm.BuildCommand.ExecuteAsync(null);
+
+        Assert.False(vm.CanChangeSelectedBranch);
+        Assert.False(vm.RemoveSelectedProjectFromLibraryCommand.CanExecute(null));
+        await vm.ChangeSelectedBranchAsync("release/slides");
+        await vm.RemoveSelectedProjectFromLibraryAsync();
+        using var library = new MemoryStream();
+        await vm.ImportLibraryAsync(library);
+        Assert.Equal("main", source.Branch);
+        Assert.Equal(2, settings.Settings.Sources.Count);
+        Assert.Equal(0, settings.SaveCount);
+        Assert.Contains("Wait for the build", vm.LibraryMessage);
+
+        await vm.RefreshLibraryAsync();
+        Assert.Equal(0, git.PrepareCount);
+
+        pending.SetResult();
+        await build;
+
+        Assert.Equal(1, git.PrepareCount);
+        Assert.False(vm.IsBuilding);
+    }
+
+    [Fact]
+    public async Task Stop_DuringBuild_WaitsForBuildToFinish()
+    {
+        var cleanup = new TaskCompletionSource();
+        var builder = new FakeSlideDeckBuilder { BuildTask = new TaskCompletionSource().Task, CancellationCleanupTask = cleanup.Task };
+        var vm = CreateViewModel(builder: builder);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        var build = vm.BuildCommand.ExecuteAsync(null);
+
+        var stop = vm.StopAsync();
+
+        Assert.False(stop.IsCompleted);
+        cleanup.SetResult();
+        await stop;
+        await build;
+        Assert.Equal("Build cancelled.", vm.BuildMessage);
+    }
+
+    [Fact]
+    public async Task Stop_DuringBuildInErrorState_WaitsForBuildAndStopsProcessHost()
+    {
+        var cleanup = new TaskCompletionSource();
+        var builder = new FakeSlideDeckBuilder { BuildTask = new TaskCompletionSource().Task, CancellationCleanupTask = cleanup.Task };
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host, builder: builder);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        host.SimulateError("Previous shutdown failed.");
+        var build = vm.BuildCommand.ExecuteAsync(null);
+
+        var stop = vm.StopAsync();
+
+        Assert.False(stop.IsCompleted);
+        cleanup.SetResult();
+        await stop;
+        await build;
+
+        Assert.Equal(1, host.StopCallCount);
+        Assert.Equal("Build cancelled.", vm.BuildMessage);
     }
 
     [Fact]

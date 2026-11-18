@@ -23,6 +23,8 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly ISlideDeckPdfExporter _slideDeckPdfExporter;
     private readonly ISlideDeckBuilder _slideDeckBuilder;
     private CancellationTokenSource? _buildCancellation;
+    private Task? _activeBuild;
+    private bool _libraryRefreshPendingAfterBuild;
     private int _buildStatusVersion;
     private readonly IGitRepositoryService _gitRepositoryService;
     private int _branchLoadVersion;
@@ -82,6 +84,10 @@ public sealed partial class MainViewModel : ObservableObject
     private PresentationProjectViewModel? _selectedProject;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanExportPdf))]
+    [NotifyPropertyChangedFor(nameof(CanChangeSelectedBranch))]
+    [NotifyPropertyChangedFor(nameof(CanRemoveSelectedProject))]
+    [NotifyCanExecuteChangedFor(nameof(RemoveSelectedProjectFromLibraryCommand))]
     [NotifyCanExecuteChangedFor(nameof(BuildCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchCommand))]
     [NotifyCanExecuteChangedFor(nameof(StartFromBeginningCommand))]
@@ -100,8 +106,13 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string? _buildMessage;
 
+    /// <summary>Full failure details of the last manual build, shown outside the optional status bar.</summary>
+    [ObservableProperty]
+    private string? _buildErrorDetails;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanExportPdf))]
+    [NotifyCanExecuteChangedFor(nameof(BuildCommand))]
     private bool _isExportingPdf;
 
     [ObservableProperty]
@@ -262,7 +273,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     public bool IsBrowserSurfaceVisible => IsBrowserRibbonSelected && HasBrowserTabs;
     public bool CanChangeSelectedBranch => IsRepositoryProjectSelected && AvailableBranches.Count > 0
-        && !IsRefreshing && HostState == HostState.Idle;
+        && !IsRefreshing && !IsBuilding && HostState == HostState.Idle;
     public Uri BrowserWorkspaceUri => SelectedBrowserTab?.Url ?? AboutBlankUri;
 
     public string CurrentSurfaceLabel => SelectedSurfaceMode == PresentationSurfaceMode.Presenter ? "Presenter View" : "Participant View";
@@ -284,9 +295,9 @@ public sealed partial class MainViewModel : ObservableObject
         false => "Build: up to date",
         null => null
     };
-    public bool CanExportPdf => SelectedProject?.SourceType == PresentationSourceType.LocalProject && !IsExportingPdf;
+    public bool CanExportPdf => SelectedProject?.SourceType == PresentationSourceType.LocalProject && !IsExportingPdf && !IsBuilding;
     /// <summary>Only projects that map 1:1 to a configured source can be removed; root-scanned projects are managed via their root source.</summary>
-    public bool CanRemoveSelectedProject => SelectedProject is not null && _settingsService.Settings.Sources.Any(s => s.Id == SelectedProject.Id);
+    public bool CanRemoveSelectedProject => !IsBuilding && SelectedProject is not null && _settingsService.Settings.Sources.Any(s => s.Id == SelectedProject.Id);
     public int SlideCount => Slides.Count;
     public string ElapsedPresentationTimeText => ElapsedPresentationTime.ToString(@"hh\:mm\:ss");
     public string SelectedSlideSummary => SelectedOutlineSlide?.Summary ?? "Select a slide to inspect its summary.";
@@ -361,6 +372,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Re-checks whether the selected local deck changed since its last successful build.</summary>
     public async Task RefreshBuildStatusAsync()
     {
+        // The build deletes its marker while compiling; the build re-checks the status once it ends.
+        if (IsBuilding)
+            return;
         var version = ++_buildStatusVersion;
         var project = SelectedProject;
         if (project?.SourceType != PresentationSourceType.LocalProject)
@@ -391,11 +405,14 @@ public sealed partial class MainViewModel : ObservableObject
 
         IsBuilding = true;
         BuildMessage = $"Building \"{project.Name}\"...";
+        BuildErrorDetails = null;
         using var buildCancellation = new CancellationTokenSource();
         _buildCancellation = buildCancellation;
+        var build = _slideDeckBuilder.BuildAsync(project.ToModel(), buildCancellation.Token);
+        _activeBuild = build;
         try
         {
-            await _slideDeckBuilder.BuildAsync(project.ToModel(), buildCancellation.Token);
+            await build;
             BuildMessage = $"Built \"{project.Name}\".";
         }
         catch (OperationCanceledException)
@@ -405,18 +422,29 @@ public sealed partial class MainViewModel : ObservableObject
         catch (Exception exception)
         {
             BuildMessage = $"Build failed: {exception.Message}";
+            BuildErrorDetails = exception.Message;
         }
         finally
         {
             _buildCancellation = null;
+            _activeBuild = null;
             IsBuilding = false;
         }
 
+        if (_libraryRefreshPendingAfterBuild)
+        {
+            _libraryRefreshPendingAfterBuild = false;
+            await RefreshLibraryCoreAsync();
+        }
         await RefreshBuildStatusAsync();
     }
 
+    // Builds may reinstall node_modules, so they must not overlap a PDF export or a running Slidev server.
     private bool CanBuild() => SelectedProject?.SourceType == PresentationSourceType.LocalProject
-        && !IsBuilding && !_startInProgress && !IsRefreshing && HostState != HostState.Starting;
+        && !IsBuilding && !IsExportingPdf && !_startInProgress && !IsRefreshing && HostState is HostState.Idle or HostState.Error;
+
+    [RelayCommand]
+    private void DismissBuildError() => BuildErrorDetails = null;
 
     private void ResetEditTabIfHidden()
     {
@@ -479,7 +507,9 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         if (IsBuilding)
         {
-            SourceMessage = "Wait for the build to finish before refreshing sources.";
+            // Callers may already have saved source changes, so refresh once the build ends instead of dropping it.
+            _libraryRefreshPendingAfterBuild = true;
+            SourceMessage = "Sources will refresh when the build finishes.";
             return;
         }
         if (HostState is HostState.Starting or HostState.Running
@@ -813,7 +843,7 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRemoveSelectedProject))]
     public async Task RemoveSelectedProjectFromLibraryAsync()
     {
-        if (SelectedProject is null)
+        if (SelectedProject is null || !CanRemoveSelectedProject)
             return;
 
         var name = SelectedProject.Name;
@@ -842,6 +872,11 @@ public sealed partial class MainViewModel : ObservableObject
 
     public async Task ImportLibraryAsync(Stream source)
     {
+        if (IsBuilding)
+        {
+            LibraryMessage = "Wait for the build to finish before importing a library.";
+            return;
+        }
         var imported = await PresentationSourceListSerializer.ImportAsync(source);
         var sources = _settingsService.Settings.Sources;
         var added = 0;
@@ -910,8 +945,14 @@ public sealed partial class MainViewModel : ObservableObject
     public async Task StopAsync()
     {
         _buildCancellation?.Cancel();
-        if (IsBuilding && !_startInProgress && HostState == HostState.Idle)
-            return;
+        if (IsBuilding && !_startInProgress && HostState is HostState.Idle or HostState.Error)
+        {
+            // Wait until the build process is killed so callers such as the updater do not race it.
+            if (_activeBuild is { } build)
+                await Task.WhenAny(build);
+            if (HostState == HostState.Idle)
+                return;
+        }
         _localStartupCancellation?.Cancel();
         if (_isHostedSessionActive)
         {

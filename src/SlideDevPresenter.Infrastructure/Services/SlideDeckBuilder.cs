@@ -10,7 +10,11 @@ namespace SlideDevPresenter.Infrastructure.Services;
 
 public sealed class SlideDeckBuilder : ISlideDeckBuilder
 {
-    private static readonly HashSet<string> ExcludedSourceDirectories = new(StringComparer.OrdinalIgnoreCase) { "node_modules", ".git", "dist", ".slidev" };
+    private static readonly HashSet<string> ExcludedSourceDirectories = new(StringComparer.OrdinalIgnoreCase) { "node_modules", ".git" };
+    // Build output and Slidev caches are only excluded at the project root so nested folders such as public/dist still count as sources.
+    private static readonly HashSet<string> ExcludedRootDirectories = new(StringComparer.OrdinalIgnoreCase) { "dist", ".slidev" };
+    private static readonly StringComparer PathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+    private const int MaxLinkHops = 32;
     private const string BuildMarkerName = ".slidev-presenter-build";
     private static readonly string[] ManifestFiles = ["package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb", ".npmrc", ".yarnrc.yml"];
     private readonly Func<ProcessStartInfo, CancellationToken, Task<(int ExitCode, string Output)>> _run;
@@ -64,6 +68,9 @@ public sealed class SlideDeckBuilder : ISlideDeckBuilder
                 "yarn" when File.Exists(Path.Combine(directory, ".yarnrc.yml")) => ["install", "--immutable"],
                 _ => new[] { "install", "--frozen-lockfile" }
             };
+            // Invalidate both markers first so a failed reinstall can never leave stale markers that skip the next build.
+            DeleteIfExists(marker);
+            DeleteIfExists(GetBuildMarkerPath(directory));
             await ExecuteAsync(CreateStartInfo(manager, directory, arguments), "Dependency installation", cancellationToken);
             if (!File.Exists(cli))
                 throw new InvalidOperationException($"Slidev CLI is missing after dependency installation in {directory}. Add @slidev/cli to the project and install dependencies manually, then retry.");
@@ -92,27 +99,95 @@ public sealed class SlideDeckBuilder : ISlideDeckBuilder
     private static string SourceFingerprint(string directory, string slidesPath, CancellationToken cancellationToken)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        hash.AppendData(Encoding.UTF8.GetBytes(Path.GetRelativePath(directory, slidesPath) + "\n"));
-        var files = new List<string>();
-        var pending = new Stack<string>([directory]);
+        var slidesRelativePath = Path.GetRelativePath(directory, slidesPath);
+        var files = new List<(string RelativePath, string FullPath)>();
+        var root = ResolveDirectory(directory) ?? Path.TrimEndingDirectorySeparator(directory);
+        var visited = new HashSet<string>(PathComparer) { root };
+        var pending = new Stack<(string Path, string Resolved)>([(root, root)]);
+        var links = new List<string>();
         while (pending.Count > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var current = pending.Pop();
-            files.AddRange(Directory.EnumerateFiles(current));
-            foreach (var child in Directory.EnumerateDirectories(current)
-                .Where(child => !ExcludedSourceDirectories.Contains(Path.GetFileName(child))))
+            var (current, resolved) = pending.Pop();
+            files.AddRange(Directory.EnumerateFiles(resolved)
+                .Select(file => (Path.Combine(current, Path.GetRelativePath(resolved, file)), file)));
+            foreach (var child in Directory.EnumerateDirectories(resolved))
             {
-                pending.Push(child);
+                var name = Path.GetFileName(child);
+                if (ExcludedSourceDirectories.Contains(name) || (current == root && ExcludedRootDirectories.Contains(name)))
+                    continue;
+                // Directory links may point back to the deck or an ancestor; follow each resolved target only once.
+                var linkTarget = new DirectoryInfo(child).LinkTarget;
+                var target = ResolveDirectory(child);
+                var logicalPath = Path.Combine(current, Path.GetRelativePath(resolved, child));
+                if (linkTarget is not null)
+                    links.Add($"{Path.GetRelativePath(root, logicalPath)}|{linkTarget}\n");
+                if (target is not null && visited.Add(target))
+                    pending.Push((logicalPath, target));
             }
         }
-        foreach (var file in files.Select(file => Path.GetRelativePath(directory, file)).Order(StringComparer.Ordinal))
+        hash.AppendData(Encoding.UTF8.GetBytes(slidesRelativePath + "\n"));
+        foreach (var link in links.Order(StringComparer.Ordinal))
+            hash.AppendData(Encoding.UTF8.GetBytes(link));
+        foreach (var file in files.OrderBy(file => file.RelativePath, StringComparer.Ordinal))
         {
-            var info = new FileInfo(Path.Combine(directory, file));
-            hash.AppendData(Encoding.UTF8.GetBytes($"{file}|{info.Length}|{info.LastWriteTimeUtc.Ticks}\n"));
+            var relativePath = Path.GetRelativePath(root, file.RelativePath);
+            var info = new FileInfo(file.FullPath);
+            hash.AppendData(Encoding.UTF8.GetBytes($"{relativePath}|{info.Length}|{info.LastWriteTimeUtc.Ticks}\n"));
         }
         return Convert.ToHexString(hash.GetHashAndReset());
     }
+
+    private static void DeleteIfExists(string path)
+    {
+        if (File.Exists(path))
+            File.Delete(path);
+    }
+
+    private static string? ResolveDirectory(string path)
+    {
+        var root = Path.GetPathRoot(path)!;
+        var current = root;
+        var pending = new LinkedList<string>(GetPathComponents(path, root));
+        var hops = 0;
+        while (pending.First is { } component)
+        {
+            pending.RemoveFirst();
+            if (component.Value is "." or "")
+                continue;
+            if (component.Value == "..")
+            {
+                current = Directory.GetParent(current)?.FullName ?? current;
+                continue;
+            }
+
+            var candidate = Path.Combine(current, component.Value);
+            var linkTarget = new DirectoryInfo(candidate).LinkTarget;
+            if (linkTarget is null)
+            {
+                current = candidate;
+                continue;
+            }
+
+            if (++hops > MaxLinkHops)
+                return null;
+            if (Path.IsPathRooted(linkTarget))
+            {
+                current = Path.GetPathRoot(linkTarget)!;
+                foreach (var targetComponent in GetPathComponents(linkTarget, current).Reverse())
+                    pending.AddFirst(targetComponent);
+            }
+            else
+            {
+                foreach (var targetComponent in GetPathComponents(linkTarget, "").Reverse())
+                    pending.AddFirst(targetComponent);
+            }
+        }
+        return Path.TrimEndingDirectorySeparator(current);
+    }
+
+    private static IEnumerable<string> GetPathComponents(string path, string root) =>
+        path[root.Length..].Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
 
     internal static string GetCliPath(string directory) => Path.Combine(directory, "node_modules", "@slidev", "cli", "bin", "slidev.mjs");
 
