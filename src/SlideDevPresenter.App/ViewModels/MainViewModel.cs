@@ -391,10 +391,11 @@ public sealed partial class MainViewModel : ObservableObject
 
         IsBuilding = true;
         BuildMessage = $"Building \"{project.Name}\"...";
-        _buildCancellation = new CancellationTokenSource();
+        using var buildCancellation = new CancellationTokenSource();
+        _buildCancellation = buildCancellation;
         try
         {
-            await _slideDeckBuilder.BuildAsync(project.ToModel(), _buildCancellation.Token);
+            await _slideDeckBuilder.BuildAsync(project.ToModel(), buildCancellation.Token);
             BuildMessage = $"Built \"{project.Name}\".";
         }
         catch (OperationCanceledException)
@@ -407,7 +408,6 @@ public sealed partial class MainViewModel : ObservableObject
         }
         finally
         {
-            _buildCancellation.Dispose();
             _buildCancellation = null;
             IsBuilding = false;
         }
