@@ -122,6 +122,7 @@
                     IsVisible="{Binding BuildErrorDetails, Converter={x:Static ObjectConverters.IsNotNull}}">
                 <DockPanel LastChildFill="True">
                     <Button DockPanel.Dock="Right" Content="Dismiss" Command="{Binding DismissBuildErrorCommand}" VerticalAlignment="Top" Margin="8,0,0,0"/>
+                    <Button DockPanel.Dock="Right" Content="Open Terminal" Command="{Binding OpenBuildTerminalCommand}" VerticalAlignment="Top" Margin="8,0,0,0"/>
                     <TextBlock DockPanel.Dock="Top" Text="Build failed" FontWeight="SemiBold" Margin="0,0,0,4"/>
                     <ScrollViewer MaxHeight="200" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                         <SelectableTextBlock Text="{Binding BuildErrorDetails}" TextWrapping="Wrap"/>

@@ -222,6 +222,7 @@ public sealed partial class MainViewModel : ObservableObject
     private TimeSpan _elapsedPresentationTime;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SwapDisplaysCommand))]
     [NotifyPropertyChangedFor(nameof(HasDetectedDisplays))]
     private int _detectedDisplayCount;
 
@@ -422,6 +423,7 @@ public sealed partial class MainViewModel : ObservableObject
         catch (Exception exception)
         {
             BuildMessage = $"Build failed: {exception.Message}";
+            _failedProjectDirectory = project.Location;
             BuildErrorDetails = exception.Message;
         }
         finally
@@ -445,6 +447,27 @@ public sealed partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void DismissBuildError() => BuildErrorDetails = null;
+
+    private string? _failedProjectDirectory;
+    private string? _launchProjectDirectory;
+
+    [RelayCommand]
+    private async Task OpenBuildTerminalAsync()
+    {
+        if (_failedProjectDirectory is null)
+            return;
+        try
+        {
+            await _gitRepositoryService.OpenProjectTerminalAsync(_failedProjectDirectory);
+        }
+        catch (Exception exception)
+        {
+            var terminalError = $"Could not open terminal. {exception.Message}";
+            BuildErrorDetails = string.IsNullOrWhiteSpace(BuildErrorDetails)
+                ? terminalError
+                : BuildErrorDetails + Environment.NewLine + Environment.NewLine + terminalError;
+        }
+    }
 
     private void ResetEditTabIfHidden()
     {
@@ -488,6 +511,11 @@ public sealed partial class MainViewModel : ObservableObject
         void Update()
         {
             ApplyStateSnapshot(e.NewState, _processHost.ParticipantUrl, _processHost.PresenterUrl, _processHost.Port, e.ErrorMessage);
+            if (e.NewState == HostState.Error && _launchProjectDirectory is not null)
+            {
+                _failedProjectDirectory = _launchProjectDirectory;
+                BuildErrorDetails = e.ErrorMessage;
+            }
             if (e.NewState is HostState.Running or HostState.Error)
                 _ = RefreshBuildStatusAsync();
         }
@@ -501,7 +529,8 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     public async Task RefreshLibraryAsync() => await RefreshLibraryCoreAsync();
 
-    private async Task RefreshLibraryCoreAsync(PresentationSource? changingSource = null, string? previousBranch = null)
+    private async Task RefreshLibraryCoreAsync(PresentationSource? changingSource = null, string? previousBranch = null,
+        string? previousSelection = null, int? branchSelectionVersion = null)
     {
         if (IsRefreshing)
             return;
@@ -538,7 +567,8 @@ public sealed partial class MainViewModel : ObservableObject
                 if (changingSource?.Id == source.Id)
                 {
                     source.Branch = previousBranch;
-                    SelectedBranch = previousBranch;
+                    if (branchSelectionVersion == _branchLoadVersion && GetRepositorySource(SelectedProject)?.Id == source.Id)
+                        SelectedBranch = previousSelection;
                 }
                 else if (IsLocalSource(source))
                 {
@@ -709,19 +739,14 @@ public sealed partial class MainViewModel : ObservableObject
 
         try
         {
-            string? currentBranch = null;
-            if (IsLocalSource(source))
-            {
-                currentBranch = await _gitRepositoryService.GetCurrentBranchAsync(source);
-                if (version != _branchLoadVersion || currentBranch is null)
-                    return;
-            }
+            var currentBranch = await _gitRepositoryService.GetCurrentBranchAsync(source);
+            if (version != _branchLoadVersion || (IsLocalSource(source) && currentBranch is null))
+                return;
 
             IsRepositoryProjectSelected = true;
-            var selected = string.IsNullOrWhiteSpace(source.Branch)
-                ? (string.IsNullOrEmpty(currentBranch) ? null : currentBranch)
+            var selected = currentBranch is not null
+                ? (currentBranch.Length == 0 ? null : currentBranch)
                 : source.Branch;
-            SelectedBranch = selected;
             var branches = await _gitRepositoryService.GetBranchesAsync(source);
             if (version != _branchLoadVersion)
                 return;
@@ -730,6 +755,8 @@ public sealed partial class MainViewModel : ObservableObject
                 AvailableBranches.Add(branch);
             if (!string.IsNullOrWhiteSpace(selected) && !AvailableBranches.Contains(selected))
                 AvailableBranches.Insert(0, selected);
+            // SelectedItem must be assigned after ItemsSource contains it.
+            SelectedBranch = selected;
         }
         catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException or UnauthorizedAccessException)
         {
@@ -746,10 +773,12 @@ public sealed partial class MainViewModel : ObservableObject
         if (source is null || !CanChangeSelectedBranch || !AvailableBranches.Contains(branch))
             return;
 
-        if (string.Equals(source.Branch, branch, StringComparison.Ordinal))
+        if (string.Equals(SelectedBranch, branch, StringComparison.Ordinal))
             return;
 
         var previousBranch = source.Branch;
+        var previousSelection = SelectedBranch;
+        var selectionVersion = _branchLoadVersion;
         source.Branch = branch;
         SelectedBranch = branch;
         IsRefreshing = true;
@@ -760,7 +789,8 @@ public sealed partial class MainViewModel : ObservableObject
         catch (Exception exception)
         {
             source.Branch = previousBranch;
-            SelectedBranch = previousBranch;
+            if (selectionVersion == _branchLoadVersion && GetRepositorySource(SelectedProject)?.Id == source.Id)
+                SelectedBranch = previousSelection;
             SourceMessage = $"Could not save the selected branch. {exception.Message}";
             return;
         }
@@ -769,7 +799,7 @@ public sealed partial class MainViewModel : ObservableObject
             IsRefreshing = false;
         }
 
-        await RefreshLibraryCoreAsync(source, previousBranch);
+        await RefreshLibraryCoreAsync(source, previousBranch, previousSelection, selectionVersion);
     }
 
     [RelayCommand(CanExecute = nameof(CanLaunch))]
@@ -822,6 +852,8 @@ public sealed partial class MainViewModel : ObservableObject
         _isHostedSessionActive = false;
         var port = _settingsService.Settings.Defaults.DefaultPort;
         _localStartupCancellation = new CancellationTokenSource();
+        _launchProjectDirectory = SelectedProject.Location;
+        BuildErrorDetails = null;
         await _processHost.StartAsync(SelectedProject.ToModel(), port, _localStartupCancellation.Token);
     }
 
@@ -966,9 +998,10 @@ public sealed partial class MainViewModel : ObservableObject
     private bool CanStop() => _startInProgress || IsBuilding || HostState is HostState.Starting or HostState.Running;
 
     [RelayCommand(CanExecute = nameof(CanSwapDisplays))]
-    public Task SwapDisplaysAsync() => _presentationWindowService.SwapDisplaysAsync();
+    public Task SwapDisplaysAsync() => CanSwapDisplays()
+        ? _presentationWindowService.SwapDisplaysAsync() : Task.CompletedTask;
 
-    private bool CanSwapDisplays() => HostState == HostState.Running;
+    private bool CanSwapDisplays() => HostState == HostState.Running && _displayService.GetDisplays().Count > 1;
 
     [RelayCommand(CanExecute = nameof(CanResume))]
     public async Task ResumeAsync()
@@ -1001,6 +1034,8 @@ public sealed partial class MainViewModel : ObservableObject
             await _processHost.StopAsync();
             var port = _settingsService.Settings.Defaults.DefaultPort;
             _localStartupCancellation = new CancellationTokenSource();
+            _launchProjectDirectory = SelectedProject.Location;
+            BuildErrorDetails = null;
             await _processHost.StartAsync(SelectedProject.ToModel(), port, _localStartupCancellation.Token);
         }
         finally
@@ -1091,6 +1126,7 @@ public sealed partial class MainViewModel : ObservableObject
     public void DetectDisplays()
     {
         DetectedDisplayCount = _displayService.GetDisplays().Count;
+        SwapDisplaysCommand.NotifyCanExecuteChanged();
     }
 
     private void OnPresentationExited(object? sender, EventArgs e)

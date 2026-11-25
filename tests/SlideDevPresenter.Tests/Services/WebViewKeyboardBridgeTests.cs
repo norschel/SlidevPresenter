@@ -51,6 +51,7 @@ public sealed class WebViewKeyboardBridgeTests
     [InlineData(Key.W, "w")]
     [InlineData(Key.N, "n")]
     [InlineData(Key.P, "p")]
+    [InlineData(Key.M, "m")]
     [InlineData(Key.OemPeriod, ".")]
     [InlineData(Key.Decimal, ".")]
     public void GetKeyScript_ForPresentationKey_UsesSharedHandler(Key key, string value)
@@ -58,6 +59,31 @@ public sealed class WebViewKeyboardBridgeTests
         Assert.Contains("window.__sdpHandlePresentationKey", WebViewKeyboardBridge.GetKeyScript(key, KeyModifiers.None));
         Assert.Contains($"key:\"{value}\"", WebViewKeyboardBridge.GetKeyScript(key, KeyModifiers.None));
         Assert.True(WebViewKeyboardBridge.ShouldHandleKey(key, KeyModifiers.None, false));
+    }
+
+    [Theory]
+    [InlineData(Key.Right, "ArrowRight")]
+    [InlineData(Key.Left, "ArrowLeft")]
+    [InlineData(Key.Up, "ArrowUp")]
+    [InlineData(Key.Down, "ArrowDown")]
+    [InlineData(Key.PageDown, "PageDown")]
+    [InlineData(Key.PageUp, "PageUp")]
+    [InlineData(Key.Space, " ")]
+    [InlineData(Key.Back, "Backspace")]
+    [InlineData(Key.Enter, "Enter")]
+    public void GetKeyScript_ForwardedNavigation_UsesBrowserKeyNames(Key key, string value)
+    {
+        var script = WebViewKeyboardBridge.GetKeyScript(key, KeyModifiers.Shift);
+        Assert.Contains($"key:\"{value}\"", script);
+        Assert.Contains("sdpForwarded:true", script);
+        Assert.Contains("shiftKey:true", script);
+        Assert.True(WebViewKeyboardBridge.ShouldHandleKey(key, KeyModifiers.None, false));
+        Assert.True(WebViewKeyboardBridge.ShouldHandleKey(key, KeyModifiers.Shift, false));
+        foreach (var modifier in new[] { KeyModifiers.Control, KeyModifiers.Alt, KeyModifiers.Meta })
+        {
+            Assert.False(WebViewKeyboardBridge.ShouldHandleKey(key, modifier, false));
+            Assert.Null(WebViewKeyboardBridge.GetKeyScript(key, modifier));
+        }
     }
 
     [Theory]
@@ -86,12 +112,21 @@ public sealed class WebViewKeyboardBridgeTests
 
     [Theory]
     [InlineData(Key.Escape)]
-    [InlineData(Key.Right)]
-    [InlineData(Key.Space)]
+    [InlineData(Key.F5)]
+    [InlineData(Key.A)]
     public void ShouldHandleKey_ForOtherKey_OnlyConsumesWhileBlanked(Key key)
     {
         Assert.False(WebViewKeyboardBridge.ShouldHandleKey(key, KeyModifiers.None, false));
         Assert.True(WebViewKeyboardBridge.ShouldHandleKey(key, KeyModifiers.None, true));
+    }
+
+    [Fact]
+    public void Script_EditableCursorToggleReturnsBeforeBlankRestore()
+    {
+        var exclusion = WebViewKeyboardBridge.Script.IndexOf("if(event.key.toLowerCase()==='m'&&editable)return;", StringComparison.Ordinal);
+        Assert.True(exclusion >= 0);
+        Assert.True(exclusion < WebViewKeyboardBridge.Script.IndexOf("if(blankScreen)", exclusion, StringComparison.Ordinal));
+        Assert.Contains("input,textarea,select,[contenteditable]:not([contenteditable=\"false\"])", WebViewKeyboardBridge.Script);
     }
 
     [Theory]

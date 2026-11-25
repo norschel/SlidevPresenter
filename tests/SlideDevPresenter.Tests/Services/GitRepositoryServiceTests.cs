@@ -5,6 +5,62 @@ namespace SlideDevPresenter.Tests.Services;
 
 public sealed class GitRepositoryServiceTests
 {
+    [Fact]
+    public async Task OpenProjectTerminal_NestedProject_UsesRepositoryRootWithoutGitCommandsInTerminal()
+    {
+        using var checkout = new TestCheckout();
+        var project = Path.Combine(checkout.Path, "nested", "slides");
+        Directory.CreateDirectory(project);
+        checkout.Client.RepositoryRoot = checkout.Path + "\n";
+        await checkout.Service.OpenProjectTerminalAsync(project);
+        Assert.Equal(checkout.Path, checkout.Client.TerminalDirectory);
+        Assert.Empty(checkout.Client.TerminalCommands);
+        Assert.Equal(new[] { "rev-parse", "--show-toplevel" }, Assert.Single(checkout.Client.Commands));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(-1)]
+    public async Task OpenProjectTerminal_NonGitOrMissingGit_UsesLocalProjectFolder(int exitCode)
+    {
+        using var checkout = new TestCheckout();
+        checkout.Client.RepositoryExitCode = exitCode;
+        await checkout.Service.OpenProjectTerminalAsync(checkout.Path);
+        Assert.Equal(checkout.Path, checkout.Client.TerminalDirectory);
+        Assert.Empty(checkout.Client.TerminalCommands);
+    }
+
+    [Fact]
+    public async Task OpenProjectTerminal_ReportsTerminalLaunchFailure()
+    {
+        using var checkout = new TestCheckout();
+        checkout.Client.TerminalException = new InvalidOperationException("No terminal installed");
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => checkout.Service.OpenProjectTerminalAsync(checkout.Path));
+        Assert.Equal("No terminal installed", error.Message);
+    }
+
+    [Fact]
+    public async Task OpenProjectTerminal_MissingFolder_DoesNotLaunch()
+    {
+        using var checkout = new TestCheckout(false);
+        await Assert.ThrowsAsync<DirectoryNotFoundException>(() => checkout.Service.OpenProjectTerminalAsync(checkout.Path));
+        Assert.Null(checkout.Client.TerminalDirectory);
+        Assert.Empty(checkout.Client.Commands);
+    }
+
+    [Fact]
+    public void CreateTerminalStartInfo_Directory_StartsShellInThatFolderWithoutRunningGit()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "repo with space");
+        var info = GitCliClient.CreateTerminalStartInfo(null, directory);
+        Assert.Equal(directory, info.WorkingDirectory);
+        var script = info.ArgumentList[^1];
+        if (OperatingSystem.IsWindows())
+            script = System.Text.Encoding.Unicode.GetString(Convert.FromBase64String(script));
+        Assert.Contains(GitCliClient.BuildShellCommand(directory), script);
+        Assert.DoesNotContain("git", script, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("owner/slides", PresentationSourceType.GitHub, "https://github.com/owner/slides")]
     [InlineData("https://github.com/owner/slides.git", PresentationSourceType.GitHub, "https://github.com/owner/slides.git")]
@@ -338,6 +394,13 @@ public sealed class GitRepositoryServiceTests
 
     private sealed class FakeGitCliClient : IGitCliClient
     {
+        public string? TerminalDirectory { get; private set; }
+        public string? RepositoryRoot { get; set; }
+        public Task OpenDirectoryTerminalAsync(string directory)
+        {
+            TerminalDirectory = directory;
+            return TerminalException is null ? Task.CompletedTask : Task.FromException(TerminalException);
+        }
         public List<string[]> Commands { get; } = [];
         public List<string[]> TerminalCommands { get; } = [];
         public string Origin { get; set; } = "https://github.com/owner/slides";
@@ -361,7 +424,7 @@ public sealed class GitRepositoryServiceTests
                 "status" => (0, WorkingChanges),
                 "show-ref" => (arguments[^1].StartsWith("refs/heads/", StringComparison.Ordinal) ? LocalBranchExitCode : RemoteBranchExitCode, ""),
                 "for-each-ref" => (0, "main\norigin/main\norigin/release/slides\norigin/HEAD\n"),
-                "rev-parse" => (RepositoryExitCode, directory!),
+                "rev-parse" => (RepositoryExitCode, RepositoryRoot ?? directory!),
                 "remote" => (0, Origin),
                 "fetch" => (FetchExitCode, ""),
                 "rev-list" => (0, Incoming),

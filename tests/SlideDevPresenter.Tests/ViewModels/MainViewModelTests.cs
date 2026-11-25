@@ -219,12 +219,20 @@ internal sealed class FakeSlideDeckBuilder : ISlideDeckBuilder
 
 internal sealed class FakeGitRepositoryService : IGitRepositoryService
 {
+    public string? TerminalDirectory { get; private set; }
+    public Exception? TerminalException { get; set; }
+    public Task OpenProjectTerminalAsync(string projectDirectory)
+    {
+        TerminalDirectory = projectDirectory;
+        return TerminalException is null ? Task.CompletedTask : Task.FromException(TerminalException);
+    }
     public bool Available { get; set; } = true;
     public RepositoryPreparation Result { get; set; } = new("/tmp/checkout", null);
     public int PrepareCount { get; private set; }
     public string? PreparedBranch { get; private set; }
     public bool AskForUpdate { get; set; }
     public bool? UpdateAccepted { get; private set; }
+    public Task? PrepareTask { get; set; }
 
     public Task<bool> IsGitAvailableAsync() => Task.FromResult(Available);
     public Task<IReadOnlyList<string>> GetBranchesAsync(PresentationSource source) => Task.FromResult<IReadOnlyList<string>>(["main", "release/slides"]);
@@ -235,6 +243,8 @@ internal sealed class FakeGitRepositoryService : IGitRepositoryService
     {
         PrepareCount++;
         PreparedBranch = source.Branch;
+        if (PrepareTask is not null)
+            await PrepareTask;
         if (AskForUpdate)
             UpdateAccepted = await confirmUpdate("New commits available");
         return Result;
@@ -243,6 +253,225 @@ internal sealed class FakeGitRepositoryService : IGitRepositoryService
 
 public class MainViewModelTests
 {
+    [Fact]
+    public async Task SwapDisplays_RequiresMultipleLiveDisplays_AndRefreshNotifiesCommand()
+    {
+        var displays = new FakeDisplayService();
+        displays.Displays.Add(new DisplayInfo(0, true, 0, 0, 1920, 1080));
+        var windows = new FakePresentationWindowService();
+        var vm = CreateViewModel(displayService: displays, windowService: windows);
+        vm.HostState = HostState.Running;
+        Assert.False(vm.SwapDisplaysCommand.CanExecute(null));
+        await vm.SwapDisplaysAsync();
+        Assert.Equal(0, windows.SwapCallCount);
+        var notifications = 0;
+        vm.SwapDisplaysCommand.CanExecuteChanged += (_, _) => notifications++;
+        displays.Displays.Add(new DisplayInfo(1, false, 1920, 0, 1920, 1080));
+        vm.DetectDisplays();
+        Assert.True(vm.SwapDisplaysCommand.CanExecute(null));
+        await vm.SwapDisplaysAsync();
+        Assert.Equal(1, windows.SwapCallCount);
+        displays.Displays.RemoveAt(1);
+        vm.DetectDisplays();
+        Assert.False(vm.SwapDisplaysCommand.CanExecute(null));
+        Assert.True(notifications >= 2);
+        vm.HostState = HostState.Idle;
+        Assert.False(vm.SwapDisplaysCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void SelectedBranch_UsesActualBranchAndAssignsAfterItemsArePopulated()
+    {
+        var settings = new FakeSettingsService();
+        var source = new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Repo", Type = PresentationSourceType.LocalProject,
+            Location = "/tmp/slides", Branch = "stale"
+        };
+        settings.Settings.Sources.Add(source);
+        var vm = CreateViewModel(settings: settings, gitService: new FakeGitRepositoryService { CurrentBranch = "release/slides" });
+        var selections = new List<string>();
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.SelectedBranch) && vm.SelectedBranch is { } branch)
+            {
+                Assert.Contains(branch, vm.AvailableBranches);
+                selections.Add(branch);
+            }
+        };
+        var project = MakeProject();
+        vm.SelectedProject = new PresentationProjectViewModel(new PresentationProject
+        {
+            Id = project.Id, Name = project.Name, SourceType = PresentationSourceType.LocalProject,
+            Location = source.Location, SlidesFilePath = "/tmp/slides/slides.md"
+        }, source.Id);
+        Assert.Equal("release/slides", vm.SelectedBranch);
+        Assert.Equal("release/slides", Assert.Single(selections));
+        Assert.Equal("stale", source.Branch);
+    }
+
+    [Fact]
+    public async Task SelectedBranch_SaveFailure_RestoresActualSelectionAndStaleConfigurationSeparately()
+    {
+        var settings = new FakeSettingsService { SaveException = new IOException("Read only") };
+        var source = new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Repo", Type = PresentationSourceType.LocalProject,
+            Location = "/tmp/slides", Branch = "stale"
+        };
+        settings.Settings.Sources.Add(source);
+        var vm = CreateViewModel(settings: settings, gitService: new FakeGitRepositoryService());
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject(), source.Id);
+        await vm.ChangeSelectedBranchAsync("release/slides");
+        Assert.Equal("stale", source.Branch);
+        Assert.Equal("main", vm.SelectedBranch);
+    }
+
+    [Fact]
+    public async Task SelectedBranch_ConfiguredButNotCheckedOutBranch_CanRequestSwitchAgain()
+    {
+        var settings = new FakeSettingsService();
+        var source = new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Repo", Type = PresentationSourceType.LocalProject,
+            Location = "/tmp/slides", Branch = "release/slides"
+        };
+        settings.Settings.Sources.Add(source);
+        var git = new FakeGitRepositoryService { Result = new(null, "Switch in terminal") };
+        var vm = CreateViewModel(settings: settings, gitService: git);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject(), source.Id);
+        Assert.Equal("main", vm.SelectedBranch);
+        await vm.ChangeSelectedBranchAsync("release/slides");
+        Assert.Equal(1, git.PrepareCount);
+        Assert.Equal("release/slides", git.PreparedBranch);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BuildOrLaunchFailure_OffersUserInvokedTerminalForFailedDeck(bool launch)
+    {
+        var git = new FakeGitRepositoryService();
+        var host = new FakeProcessHost();
+        var vm = CreateViewModel(host: host, gitService: git,
+            builder: new FakeSlideDeckBuilder { ExceptionToThrow = new InvalidOperationException("Compilation failed") });
+        var failed = MakeProject();
+        vm.SelectedProject = new PresentationProjectViewModel(failed);
+        if (launch)
+        {
+            await vm.LaunchAsync();
+            host.SimulateError("Compilation failed");
+        }
+        else
+            await vm.BuildAsync();
+        Assert.Equal("Compilation failed", vm.BuildErrorDetails);
+        Assert.Null(git.TerminalDirectory);
+        vm.SelectedProject = new PresentationProjectViewModel(MakeProject());
+        await vm.OpenBuildTerminalCommand.ExecuteAsync(null);
+        Assert.Equal(failed.Location, git.TerminalDirectory);
+        git.TerminalException = new InvalidOperationException("Automation denied");
+        await vm.OpenBuildTerminalCommand.ExecuteAsync(null);
+        Assert.Contains("Could not open terminal", vm.BuildErrorDetails);
+        Assert.Contains("Automation denied", vm.BuildErrorDetails);
+        Assert.Contains("Compilation failed", vm.BuildErrorDetails);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SelectedBranch_DelayedSaveFailure_DoesNotOverwriteNewSelection(bool returnToFirstRepository)
+    {
+        var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var settings = new FakeSettingsService { SaveTask = pending.Task };
+        var first = new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "First", Type = PresentationSourceType.Git,
+            Location = "https://github.com/owner/first", Branch = "stale"
+        };
+        var second = new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Second", Type = PresentationSourceType.Git,
+            Location = "https://github.com/owner/second", Branch = "second-config"
+        };
+        settings.Settings.Sources.AddRange([first, second]);
+        var git = new FakeGitRepositoryService();
+        var vm = CreateViewModel(settings: settings, gitService: git);
+        var firstProject = new PresentationProjectViewModel(MakeProject(), first.Id);
+        var secondProject = new PresentationProjectViewModel(MakeProject(), second.Id);
+        vm.SelectedProject = firstProject;
+        var change = vm.ChangeSelectedBranchAsync("release/slides");
+        git.CurrentBranch = "release/slides";
+        vm.SelectedProject = secondProject;
+        if (returnToFirstRepository)
+            vm.SelectedProject = firstProject;
+        pending.SetException(new IOException("Disk full"));
+        await change;
+
+        Assert.Equal("stale", first.Branch);
+        Assert.Equal("second-config", second.Branch);
+        Assert.Same(returnToFirstRepository ? firstProject : secondProject, vm.SelectedProject);
+        Assert.Equal("release/slides", vm.SelectedBranch);
+        Assert.Equal(0, git.PrepareCount);
+        Assert.False(vm.IsRefreshing);
+        Assert.Contains("Disk full", vm.SourceMessage);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SelectedBranch_DelayedDecline_RestoresConfigurationButOnlyOwnedActualSelection(bool selectSecondRepository)
+    {
+        var settings = new FakeSettingsService();
+        var first = new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "First", Type = PresentationSourceType.Git,
+            Location = "https://github.com/owner/first", Branch = "stale"
+        };
+        var second = new PresentationSource
+        {
+            Id = Guid.NewGuid(), Name = "Second", Type = PresentationSourceType.Git,
+            Location = "https://github.com/owner/second", Branch = "second-config"
+        };
+        settings.Settings.Sources.AddRange([first, second]);
+        var scanner = new FakeSourceScanner();
+        scanner.Projects.Add(new PresentationProject
+        {
+            Id = Guid.NewGuid(), Name = "Deck", SourceType = PresentationSourceType.LocalProject,
+            Location = "/tmp/checkout", SlidesFilePath = "/tmp/checkout/slides.md"
+        });
+        var git = new FakeGitRepositoryService();
+        var vm = CreateViewModel(settings: settings, scanner: scanner, gitService: git);
+        await vm.RefreshLibraryAsync();
+        vm.SelectedProject = vm.Projects.Single(project => project.RepositorySourceId == first.Id);
+        var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        git.PrepareTask = pending.Task;
+        git.Result = new("/tmp/checkout", "Branch switch declined.", BranchSwitchDeclined: true);
+        var selections = new List<string?>();
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.SelectedBranch))
+                selections.Add(vm.SelectedBranch);
+        };
+        var change = vm.ChangeSelectedBranchAsync("release/slides");
+        if (selectSecondRepository)
+        {
+            git.CurrentBranch = "release/slides";
+            vm.SelectedProject = vm.Projects.Single(project => project.RepositorySourceId == second.Id);
+            selections.Clear();
+        }
+        pending.SetResult();
+        await change;
+
+        Assert.Equal("stale", first.Branch);
+        Assert.Equal("second-config", second.Branch);
+        Assert.Equal(selectSecondRepository ? second.Id : first.Id, vm.SelectedProject?.RepositorySourceId);
+        Assert.Equal(selectSecondRepository ? "release/slides" : "main", vm.SelectedBranch);
+        Assert.DoesNotContain("stale", selections);
+        if (selectSecondRepository)
+            Assert.DoesNotContain("main", selections);
+        Assert.Equal(2, settings.SaveCount);
+        Assert.False(vm.IsRefreshing);
+    }
     private static MainViewModel CreateViewModel(
         FakeSettingsService? settings = null,
         FakeSourceScanner? scanner = null,

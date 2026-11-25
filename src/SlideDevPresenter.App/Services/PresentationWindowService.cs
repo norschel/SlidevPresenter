@@ -61,7 +61,7 @@ public sealed class PresentationWindowService : IPresentationWindowService
 
     private void SwapDisplaysOnUiThread()
     {
-        if (_participantWindow is null)
+        if (_participantWindow is null || _displayService.GetDisplays().Count < 2)
             return;
 
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } mainWindow })

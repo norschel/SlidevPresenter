@@ -36,6 +36,7 @@ public partial class MainWindow : Window
     private Panel? _browserWebViewHost;
     private bool _embeddedWebViewsDisabledForSession;
     private readonly BlankOverlayStateSynchronizer _blankOverlayState = new();
+    private PresentationCursorController? _presentationCursor;
 
     /// <summary>Parameterless constructor for Avalonia designer.</summary>
     public MainWindow()
@@ -51,7 +52,11 @@ public partial class MainWindow : Window
         ConfigureShortcutTooltips();
         ConfigureNativeApplicationMenu();
         AttachEscapeHandler();
+        Screens.Changed += OnScreensChanged;
+        Opened += (_, _) => _viewModel?.DetectDisplays();
     }
+
+    private void OnScreensChanged(object? sender, EventArgs e) => _viewModel?.DetectDisplays();
 
     public MainWindow(
         MainViewModel viewModel,
@@ -81,6 +86,8 @@ public partial class MainWindow : Window
         ConfigureShortcutTooltips();
         ConfigureNativeApplicationMenu();
         AttachEscapeHandler();
+        Screens.Changed += OnScreensChanged;
+        Opened += (_, _) => _viewModel?.DetectDisplays();
     }
 
     private async void Settings_Click(object? sender, RoutedEventArgs e)
@@ -450,6 +457,7 @@ public partial class MainWindow : Window
         EmbeddedWebView.NewWindowRequested += OnEmbeddedWebViewNewWindowRequested;
         EmbeddedWebView.WebMessageReceived += OnWebViewWebMessageReceived;
         EmbeddedWebView.KeyDown += OnWebViewKeyDown;
+        _presentationCursor = new PresentationCursorController(EmbeddedWebView);
         SyncEmbeddedWebViewSource();
         SyncEmbeddedWebViewAttachment();
     }
@@ -493,6 +501,9 @@ public partial class MainWindow : Window
             case nameof(MainViewModel.CanShowEmbeddedSurface):
                 SyncEmbeddedWebViewAttachment();
                 break;
+            case nameof(MainViewModel.IsRunning):
+                SyncPresentationCursor();
+                break;
             case nameof(MainViewModel.IsBrowserSurfaceVisible):
                 SyncBrowserWebViewAttachment();
                 break;
@@ -507,7 +518,13 @@ public partial class MainWindow : Window
     }
 
     private void SyncEmbeddedWebViewAttachment()
-        => DeferWebViewAttachment(_embeddedWebViewHost, EmbeddedWebView, () => !_embeddedWebViewsDisabledForSession && (_viewModel?.CanShowEmbeddedSurface ?? false));
+    {
+        SyncPresentationCursor();
+        DeferWebViewAttachment(_embeddedWebViewHost, EmbeddedWebView, () => !_embeddedWebViewsDisabledForSession && (_viewModel?.CanShowEmbeddedSurface ?? false));
+    }
+
+    private void SyncPresentationCursor() => _presentationCursor?.SetActive(
+        !_embeddedWebViewsDisabledForSession && _viewModel?.IsRunning == true && _viewModel.CanShowEmbeddedSurface);
 
     private void SyncBrowserWebViewAttachment()
         => DeferWebViewAttachment(_browserWebViewHost, BrowserWebView, () => !_embeddedWebViewsDisabledForSession && (_viewModel?.IsBrowserSurfaceVisible ?? false));
@@ -557,6 +574,7 @@ public partial class MainWindow : Window
             return;
 
         _embeddedWebViewsDisabledForSession = true;
+        SyncPresentationCursor();
 
         EmbeddedWebView.NavigationStarted -= OnEmbeddedWebViewNavigationStarted;
         EmbeddedWebView.NavigationCompleted -= OnWebViewNavigationCompleted;
@@ -753,7 +771,7 @@ public partial class MainWindow : Window
 
         Key? key = e.Key switch
         {
-            Key.B or Key.W or Key.N or Key.P or Key.OemPeriod or Key.Decimal => e.Key,
+            Key.B or Key.W or Key.M or Key.N or Key.P or Key.OemPeriod or Key.Decimal => e.Key,
             Key.Right or Key.Down or Key.PageDown or Key.Enter => Key.N,
             Key.Left or Key.Up or Key.PageUp or Key.Back => Key.P,
             Key.Space => e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? Key.P : Key.N,
@@ -792,6 +810,8 @@ public partial class MainWindow : Window
             await webView.InvokeScript(ReferenceEquals(webView, BrowserWebView)
                 ? WebViewKeyboardBridge.EscapeScript + WebViewKeyboardBridge.DiagnosticsScript
                 : WebViewKeyboardBridge.Script + WebViewKeyboardBridge.DiagnosticsScript);
+            if (ReferenceEquals(webView, EmbeddedWebView))
+                _presentationCursor?.PageLoaded();
         }
         catch (Exception exception)
         {
@@ -827,7 +847,12 @@ public partial class MainWindow : Window
     }
 
     private bool TryHandlePresentationKey(KeyEventArgs e) =>
-        e.Handled || (!_embeddedWebViewsDisabledForSession && _viewModel?.CanShowEmbeddedSurface == true
+        e.Handled || (e.Source is not TextBox && !_embeddedWebViewsDisabledForSession && _viewModel?.CanShowEmbeddedSurface == true
+            && e.Source is not Control { DataContext: BrowserTabViewModel }
+            // Navigation belongs to the surface, not focused ribbon/list/selector controls.
+            && (_blankOverlayState.IsBlanked || e.Source is NativeWebView || ReferenceEquals(e.Source, this)
+                || e.Key is not (Key.Right or Key.Left or Key.Up or Key.Down or Key.PageUp or Key.PageDown
+                    or Key.Space or Key.Enter or Key.Back))
             && WebViewKeyboardBridge.TryHandleKey(EmbeddedWebView, e, _blankOverlayState.IsBlanked));
 
     private void TryHandleEscape(KeyEventArgs e)
@@ -872,6 +897,10 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        Screens.Changed -= OnScreensChanged;
+        _presentationCursor?.Dispose();
+        if (_presentationWindowService is not null)
+            _presentationWindowService.BlankStateChanged -= OnParticipantBlankStateChanged;
         if (_viewModel is not null)
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
 

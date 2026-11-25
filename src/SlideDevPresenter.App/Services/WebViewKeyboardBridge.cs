@@ -76,13 +76,20 @@ public static class WebViewKeyboardBridge
                     event.preventDefault();
                     event.stopImmediatePropagation();
                 }
+                const target=event.target;
+                const editable=target instanceof Element&&target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])');
+                if(event.key.toLowerCase()==='m'&&editable)return;
+                if(event.key.toLowerCase()==='m'&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!editable){
+                    consume();
+                    if(!event.repeat)notify('sdp:cursor-toggle');
+                    return;
+                }
                 if(blankScreen){
                     consume();
                     if(event.repeat)return;
                     setBlankScreen(null,true);
                     return;
                 }
-                const target=event.target;
                 if(event.ctrlKey||event.metaKey||event.altKey||
                     (target instanceof Element&&target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])')))return;
                 const key=event.key.toLowerCase();
@@ -90,13 +97,17 @@ public static class WebViewKeyboardBridge
                     consume();
                     if(event.repeat)return;
                     setBlankScreen(key==='w'?'white':'black',true);
-                }else if(key==='n'||key==='p'){
+                }else if(key==='n'||key==='p'||key==='arrowright'||key==='arrowleft'||
+                    key==='arrowup'||key==='arrowdown'||key==='pageup'||key==='pagedown'||
+                    key==='backspace'||key==='enter'||key===' '||event.sdpForwarded){
                     consume();
-                    const direction=key==='p'?'ArrowLeft':'ArrowRight';
-                    const keyCode=key==='p'?37:39;
+                    const direction=key==='n'?'n':key==='p'?'p':key===' '?(event.shiftKey?'ArrowLeft':'ArrowRight'):event.key;
+                    const code={n:'KeyN',p:'KeyP'}[direction]||direction;
+                    const keyCode={n:78,p:80,ArrowLeft:37,ArrowRight:39,ArrowUp:38,ArrowDown:40,PageUp:33,PageDown:34,Backspace:8,Enter:13,' ':32}[direction];
+                    const dispatchTarget=target instanceof Element?target:(document.activeElement||document.body);
                     for(const type of ['keydown','keyup']){
-                        document.dispatchEvent(new KeyboardEvent(type,{
-                            key:direction,code:direction,keyCode:keyCode,which:keyCode,bubbles:true
+                        dispatchTarget.dispatchEvent(new KeyboardEvent(type,{
+                            key:direction,code:code,keyCode:keyCode,which:keyCode,bubbles:true,cancelable:true,composed:true,shiftKey:!!event.shiftKey
                         }));
                     }
                 }
@@ -122,11 +133,14 @@ public static class WebViewKeyboardBridge
 
     public static bool ShouldHandleKey(Key key, KeyModifiers modifiers, bool isBlanked) =>
         isBlanked || ((modifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) == 0
-            && key is Key.B or Key.W or Key.N or Key.P or Key.OemPeriod or Key.Decimal);
+            && key is Key.B or Key.W or Key.M or Key.N or Key.P or Key.OemPeriod or Key.Decimal
+                or Key.Right or Key.Left or Key.Up or Key.Down or Key.PageUp or Key.PageDown
+                or Key.Space or Key.Enter or Key.Back);
 
     public static bool TryHandleKey(NativeWebView webView, KeyEventArgs eventArgs, bool isBlanked)
     {
-        if (eventArgs.Handled || !ShouldHandleKey(eventArgs.Key, eventArgs.KeyModifiers, isBlanked))
+        if (eventArgs.Handled || eventArgs.Source is TextBox
+            || !ShouldHandleKey(eventArgs.Key, eventArgs.KeyModifiers, isBlanked))
             return false;
 
         eventArgs.Handled = true;
@@ -157,11 +171,22 @@ public static class WebViewKeyboardBridge
             Key.W => "w",
             Key.N => "n",
             Key.P => "p",
+            Key.M => "m",
+            Key.Right => "ArrowRight",
+            Key.Left => "ArrowLeft",
+            Key.Up => "ArrowUp",
+            Key.Down => "ArrowDown",
+            Key.PageUp => "PageUp",
+            Key.PageDown => "PageDown",
+            Key.Back => "Backspace",
+            Key.Space => " ",
+            Key.Enter => "Enter",
             Key.OemPeriod or Key.Decimal => ".",
             _ => key.ToString()
         };
 
         return "window.__sdpHandlePresentationKey?.({key:" + JsonSerializer.Serialize(value)
+            + ",sdpForwarded:true,shiftKey:" + (modifiers.HasFlag(KeyModifiers.Shift) ? "true" : "false")
             + ",target:" + (useFocusedElement ? "document.activeElement" : "document.body")
             + ",preventDefault:function(){},stopImmediatePropagation:function(){}});";
     }
