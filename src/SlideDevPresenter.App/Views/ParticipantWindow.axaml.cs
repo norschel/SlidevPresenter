@@ -21,6 +21,7 @@ public partial class ParticipantWindow : Window
     private bool _isScreenBlanked;
     private bool _isScreenWhite;
     private bool _hasLoadedPage;
+    private PresentationCursorController? _presentationCursor;
 
     /// <summary>Raised when the user requests to exit the presentation (e.g. via ESC).</summary>
     public event EventHandler? PresentationExited;
@@ -67,10 +68,11 @@ public partial class ParticipantWindow : Window
             FitToScreen();
 
         WindowState = WindowState.FullScreen;
+        Dispatcher.UIThread.Post(FocusPresentation, DispatcherPriority.Background);
 
         // macOS may push the window below the notch after the fullscreen animation; trim the overflow once it has settled.
         if (OperatingSystem.IsMacOS())
-            DispatcherTimer.RunOnce(ClipToScreen, TimeSpan.FromMilliseconds(900));
+            DispatcherTimer.RunOnce(() => { ClipToScreen(); FocusPresentation(); }, TimeSpan.FromMilliseconds(900));
     }
 
     private Screen? CurrentScreen() => Screens.ScreenFromPoint(Position) ?? Screens.ScreenFromWindow(this);
@@ -116,9 +118,9 @@ public partial class ParticipantWindow : Window
         {
             Position = position;
             SetFullscreen();
-            Dispatcher.UIThread.Post(FocusPresentation, DispatcherPriority.Background);
-            // macOS ignores activation while the fullscreen animation runs; retry once it has settled.
-            DispatcherTimer.RunOnce(FocusPresentation, TimeSpan.FromMilliseconds(900));
+            // SetFullscreen already schedules the settled-focus retry on macOS.
+            if (!OperatingSystem.IsMacOS())
+                DispatcherTimer.RunOnce(FocusPresentation, TimeSpan.FromMilliseconds(900));
         }, DispatcherPriority.Background);
     }
 
@@ -129,6 +131,8 @@ public partial class ParticipantWindow : Window
     // Moving/re-fullscreening drops keyboard focus, so clicker and arrow keys would no longer reach the slides.
     private async void FocusPresentation()
     {
+        if (_exitRaised || !IsVisible)
+            return;
         Activate();
         WebView.Focus();
 
@@ -138,6 +142,7 @@ public partial class ParticipantWindow : Window
             await WebView.InvokeScript(WebViewKeyboardBridge.Script);
             _hasLoadedPage = true;
             await WebViewKeyboardBridge.SetBlankStateAsync(WebView, _isScreenBlanked, _isScreenWhite);
+            _presentationCursor?.PageLoaded();
         }
         catch (Exception exception)
         {
@@ -147,6 +152,7 @@ public partial class ParticipantWindow : Window
 
     private void AttachHandlers()
     {
+        _presentationCursor = new PresentationCursorController(WebView);
         _escapeHandler.ExitRequested += (_, _) => RaisePresentationExited();
         AddHandler(InputElement.KeyDownEvent, OnWindowPreviewKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
         WebView.KeyDown += OnWindowPreviewKeyDown;
@@ -177,7 +183,8 @@ public partial class ParticipantWindow : Window
             await WebView.InvokeScript(WebViewKeyboardBridge.Script);
             _hasLoadedPage = true;
             await WebViewKeyboardBridge.SetBlankStateAsync(WebView, _isScreenBlanked, _isScreenWhite);
-            WebView.Focus();
+            _presentationCursor?.PageLoaded();
+            FocusPresentation();
         }
         catch (Exception exception)
         {
@@ -200,6 +207,7 @@ public partial class ParticipantWindow : Window
 
     private void OnOpened(object? sender, EventArgs e)
     {
+        _presentationCursor?.SetActive(true);
         if (Uri.TryCreate(_participantUrl, UriKind.Absolute, out var uri))
             WebView.Source = uri;
     }
@@ -249,6 +257,7 @@ public partial class ParticipantWindow : Window
         if (_exitRaised)
             return;
         _exitRaised = true;
+        _presentationCursor?.SetActive(false);
         PresentationExited?.Invoke(this, EventArgs.Empty);
     }
 
@@ -270,6 +279,12 @@ public partial class ParticipantWindow : Window
             _isFullscreenRequested = false;
             RaisePresentationExited();
         }
+
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+        _presentationCursor?.Dispose();
+        base.OnClosed(e);
+    }
 }

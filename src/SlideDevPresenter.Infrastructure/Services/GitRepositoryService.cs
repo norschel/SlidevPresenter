@@ -19,6 +19,19 @@ public sealed class GitRepositoryService(string? cacheDirectory = null, string g
         return result.ExitCode == 0;
     }
 
+    public async Task OpenProjectTerminalAsync(string projectDirectory)
+    {
+        var directory = Path.GetFullPath(SourceScanner.ExpandHomePath(projectDirectory));
+        if (!Directory.Exists(directory))
+            throw new DirectoryNotFoundException($"Project folder does not exist: {directory}");
+
+        // A missing Git executable is not an error for local decks.
+        var root = await _gitClient.RunAsync(directory, "rev-parse", "--show-toplevel");
+        if (root.ExitCode == 0 && !string.IsNullOrWhiteSpace(root.Output))
+            directory = Path.GetFullPath(root.Output.Trim());
+        await _gitClient.OpenDirectoryTerminalAsync(directory);
+    }
+
     public static string NormalizeRemote(string location, PresentationSourceType type) => RepositoryLocation.Normalize(location, type);
 
     private static bool IsLocal(PresentationSource source) => source.Type is PresentationSourceType.LocalRoot or PresentationSourceType.LocalProject;

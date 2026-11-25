@@ -7,6 +7,7 @@ public interface IGitCliClient
 {
     Task<(int ExitCode, string Output)> RunAsync(string? directory, params string[] arguments);
     Task OpenTerminalAsync(params string[] arguments);
+    Task OpenDirectoryTerminalAsync(string directory);
 }
 
 public sealed class GitCliClient(string gitExecutable = "git") : IGitCliClient
@@ -63,16 +64,48 @@ public sealed class GitCliClient(string gitExecutable = "git") : IGitCliClient
     public async Task OpenTerminalAsync(params string[] arguments)
     {
         var command = BuildShellCommand([gitExecutable, .. arguments]);
+        await LaunchTerminalAsync(command, null);
+    }
+
+    public Task OpenDirectoryTerminalAsync(string directory) =>
+        LaunchTerminalAsync(null, Path.GetFullPath(directory));
+
+    private static async Task LaunchTerminalAsync(string? command, string? directory)
+    {
+        var info = CreateTerminalStartInfo(command, directory);
+        using var process = Process.Start(info) ?? throw new InvalidOperationException("Could not open a terminal.");
+        if (OperatingSystem.IsMacOS())
+        {
+            var error = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            if (process.ExitCode != 0)
+                throw new InvalidOperationException("Terminal could not be opened. Allow Terminal automation in System Settings > Privacy & Security > Automation. " + await error);
+        }
+        else if (!OperatingSystem.IsWindows())
+        {
+            // Linux terminal emulators can start successfully but immediately reject the display/session.
+            await Task.Delay(300);
+            if (process.HasExited && process.ExitCode != 0)
+                throw new InvalidOperationException($"Terminal could not be opened (exit code {process.ExitCode}). Check x-terminal-emulator and the desktop session.");
+        }
+    }
+
+    /// <summary>Builds the platform terminal launch; with <paramref name="directory"/> the shell starts there instead of running a command.</summary>
+    public static ProcessStartInfo CreateTerminalStartInfo(string? command, string? directory)
+    {
         ProcessStartInfo info;
         if (OperatingSystem.IsMacOS())
         {
             info = new("osascript") { UseShellExecute = false, RedirectStandardError = true };
             info.ArgumentList.Add("-e");
-            info.ArgumentList.Add("tell application \"Terminal\"\nactivate\ndo script \"" + command.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r") + "\"\nend tell");
+            var script = directory is null ? command! : "cd -- " + BuildShellCommand(directory);
+            info.ArgumentList.Add("tell application \"Terminal\"\nactivate\ndo script \"" + script.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r") + "\"\nend tell");
         }
         else if (OperatingSystem.IsWindows())
         {
-            var script = "& " + command + "; Write-Host 'If Git failed, fix it manually here. Refresh the presenter after completion.'";
+            var script = directory is null
+                ? "& " + command + "; Write-Host 'If Git failed, fix it manually here. Refresh the presenter after completion.'"
+                : "Set-Location -LiteralPath " + BuildShellCommand(directory);
             info = new("powershell.exe") { UseShellExecute = true };
             info.ArgumentList.Add("-NoExit");
             info.ArgumentList.Add("-EncodedCommand");
@@ -84,15 +117,12 @@ public sealed class GitCliClient(string gitExecutable = "git") : IGitCliClient
             info.ArgumentList.Add("-e");
             info.ArgumentList.Add("sh");
             info.ArgumentList.Add("-c");
-            info.ArgumentList.Add(command + "; printf '\\nFix any Git errors here, then refresh the presenter. Press Enter to close.'; read answer");
+            info.ArgumentList.Add(directory is null
+                ? command + "; printf '\\nFix any Git errors here, then refresh the presenter. Press Enter to close.'; read answer"
+                : "cd -- " + BuildShellCommand(directory) + " && exec \"${SHELL:-/bin/sh}\"");
         }
-        using var process = Process.Start(info) ?? throw new InvalidOperationException("Could not open a terminal.");
-        if (OperatingSystem.IsMacOS())
-        {
-            var error = process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
-            if (process.ExitCode != 0)
-                throw new InvalidOperationException("Terminal could not be opened. Allow Terminal automation in System Settings > Privacy & Security > Automation. " + await error);
-        }
+        if (directory is not null)
+            info.WorkingDirectory = directory;
+        return info;
     }
 }
