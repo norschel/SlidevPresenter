@@ -97,13 +97,17 @@ public static class WebViewKeyboardBridge
                     consume();
                     if(event.repeat)return;
                     setBlankScreen(key==='w'?'white':'black',true);
-                }else if(key==='n'||key==='p'||event.sdpForwarded){
+                }else if(key==='n'||key==='p'||key==='arrowright'||key==='arrowleft'||
+                    key==='arrowup'||key==='arrowdown'||key==='pageup'||key==='pagedown'||
+                    key==='backspace'||key==='enter'||key===' '||event.sdpForwarded){
                     consume();
-                    const direction=key==='p'?'ArrowLeft':key==='n'?'ArrowRight':event.key;
-                    const keyCode={ArrowLeft:37,ArrowRight:39,ArrowUp:38,ArrowDown:40,PageUp:33,PageDown:34,Backspace:8,Enter:13,' ':32}[direction];
+                    const direction=key==='n'?'n':key==='p'?'p':key===' '?(event.shiftKey?'ArrowLeft':'ArrowRight'):event.key;
+                    const code={n:'KeyN',p:'KeyP'}[direction]||direction;
+                    const keyCode={n:78,p:80,ArrowLeft:37,ArrowRight:39,ArrowUp:38,ArrowDown:40,PageUp:33,PageDown:34,Backspace:8,Enter:13,' ':32}[direction];
+                    const dispatchTarget=target instanceof Element?target:(document.activeElement||document.body);
                     for(const type of ['keydown','keyup']){
-                        document.dispatchEvent(new KeyboardEvent(type,{
-                            key:direction,code:direction,keyCode:keyCode,which:keyCode,bubbles:true,shiftKey:!!event.shiftKey
+                        dispatchTarget.dispatchEvent(new KeyboardEvent(type,{
+                            key:direction,code:code,keyCode:keyCode,which:keyCode,bubbles:true,cancelable:true,composed:true,shiftKey:!!event.shiftKey
                         }));
                     }
                 }

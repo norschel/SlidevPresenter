@@ -14,17 +14,20 @@ public sealed class PresentationCursorController : IDisposable
     private readonly DispatcherTimer _timer = new() { Interval = PresentationCursorState.InactivityTimeout };
     private readonly Cursor? _originalCursor;
     private readonly Cursor _hiddenCursor = new(StandardCursorType.None);
+    private long _applyVersion;
 
     public const string Script = """
         (function(){
             if(window.__sdpCursorBridge)return;
             window.__sdpCursorBridge=true;
-            let style=null,active=false;
+            let style=null,active=false,version=0;
             function notify(message){
                 if(typeof invokeCSharpAction==='function')invokeCSharpAction(message);
                 else if(window.external&&window.external.invokeCSharpAction)window.external.invokeCSharpAction(message);
             }
-            window.__sdpSetCursor=function(enabled,hidden){
+            window.__sdpSetCursor=function(enabled,hidden,revision){
+                if(revision<version)return;
+                version=revision;
                 active=enabled;
                 if(!enabled||!hidden){if(style){style.remove();style=null;}return;}
                 if(!style){
@@ -102,10 +105,11 @@ public sealed class PresentationCursorController : IDisposable
 
     private async void Apply()
     {
+        var version = ++_applyVersion;
         _webView.Cursor = _state.IsHidden ? _hiddenCursor : _originalCursor;
         try
         {
-            await _webView.InvokeScript(Script + $"window.__sdpSetCursor({_state.IsActive.ToString().ToLowerInvariant()},{_state.IsHidden.ToString().ToLowerInvariant()});");
+            await _webView.InvokeScript(Script + $"window.__sdpSetCursor({_state.IsActive.ToString().ToLowerInvariant()},{_state.IsHidden.ToString().ToLowerInvariant()},{version});");
         }
         catch (Exception exception)
         {

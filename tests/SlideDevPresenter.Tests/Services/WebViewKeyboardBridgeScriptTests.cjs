@@ -7,6 +7,9 @@ const vm = require('node:vm');
 const source = fs.readFileSync(path.resolve(__dirname,
     '../../../src/SlideDevPresenter.App/Services/WebViewKeyboardBridge.cs'), 'utf8');
 const script = source.match(/public const string Script = """\s*([\s\S]*?)\s*""" \+ EscapeScript;/)[1];
+const cursorSource = fs.readFileSync(path.resolve(__dirname,
+    '../../../src/SlideDevPresenter.App/Services/PresentationCursorController.cs'), 'utf8');
+const cursorScript = cursorSource.match(/public const string Script = """\s*([\s\S]*?)\s*""";/)[1];
 
 class Element {
     constructor(tag = 'div', contenteditable = null, parent = null) {
@@ -20,12 +23,14 @@ class Element {
     }
     appendChild(child) { this.child = child; }
     remove() { this.removed = true; }
+    dispatchEvent(event) { this.dispatched?.push(event); }
 }
 function surface() {
     const messages = [], dispatched = [];
     const body = new Element();
+    body.dispatched = dispatched;
     const window = { addEventListener() {} };
-    const document = { body, createElement: () => new Element(), dispatchEvent: e => dispatched.push(e) };
+    const document = { body, activeElement: body, createElement: () => new Element(), dispatchEvent: e => dispatched.push(e) };
     vm.runInNewContext(script, {
         window, document, Element, invokeCSharpAction: message => messages.push(message),
         KeyboardEvent: class { constructor(type, options) { this.type = type; Object.assign(this, options); } }
@@ -77,11 +82,13 @@ for (const color of ['black', 'white']) {
     nonEditable.window.__sdpSetBlankState(color);
     assert.equal(press(nonEditable, 'm', new Element('div', 'false')).prevented, true);
     assert.deepEqual(nonEditable.messages, ['sdp:cursor-toggle']);
+    assert.equal(press(nonEditable, 'm', new Element('div', 'false')).prevented, true);
+    assert.deepEqual(nonEditable.messages, ['sdp:cursor-toggle', 'sdp:cursor-toggle']);
     cases++;
 }
 for (const [key, code] of Object.entries({
     ArrowLeft: 37, ArrowRight: 39, ArrowUp: 38, ArrowDown: 40,
-    PageUp: 33, PageDown: 34, Backspace: 8, Enter: 13, ' ': 32
+    PageUp: 33, PageDown: 34, Backspace: 8, Enter: 13, n: 78, p: 80
 })) {
     const s = surface();
     assert.equal(press(s, key, s.body, { sdpForwarded: true, shiftKey: true }).prevented, true);
@@ -92,6 +99,33 @@ for (const [key, code] of Object.entries({
         assert.equal(press(s, key, target, { sdpForwarded: true }).prevented, false);
         assert.deepEqual(s.dispatched, []);
     }
+    cases++;
+}
+for (const [key, normalized, eventCode, keyCode, shiftKey] of [
+    ['n', 'n', 'KeyN', 78, false], ['N', 'n', 'KeyN', 78, true],
+    ['p', 'p', 'KeyP', 80, false], ['P', 'p', 'KeyP', 80, true],
+    ['ArrowRight', 'ArrowRight', 'ArrowRight', 39, false], ['ArrowLeft', 'ArrowLeft', 'ArrowLeft', 37, false],
+    [' ', 'ArrowRight', 'ArrowRight', 39, false], [' ', 'ArrowLeft', 'ArrowLeft', 37, true]
+]) {
+    const s = surface();
+    assert.equal(press(s, key, s.body, { shiftKey }).prevented, true);
+    assert.deepEqual(s.dispatched.map(e => [e.type, e.key, e.code, e.keyCode]),
+        [['keydown', normalized, eventCode, keyCode], ['keyup', normalized, eventCode, keyCode]]);
+    cases++;
+}
+
+{
+    const documentElement = new Element();
+    const window = { addEventListener() {} };
+    const document = { documentElement, createElement: () => new Element() };
+    vm.runInNewContext(cursorScript, { window, document });
+    window.__sdpSetCursor(true, true, 2);
+    const hiddenStyle = documentElement.child;
+    assert.equal(hiddenStyle.removed, undefined);
+    window.__sdpSetCursor(true, false, 1);
+    assert.equal(hiddenStyle.removed, undefined);
+    window.__sdpSetCursor(true, false, 3);
+    assert.equal(hiddenStyle.removed, true);
     cases++;
 }
 console.log(`WebView keyboard script: ${cases} cases passed.`);
